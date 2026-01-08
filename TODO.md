@@ -23,11 +23,25 @@ Ein virtuelles, softwarebasiertes Mischpult mit nativer DANTE-Unterstützung, MI
 #### 1.1 Projektstruktur
 - [ ] Monorepo-Struktur aufsetzen (pnpm workspaces oder Nx)
 - [ ] Server-Projekt initialisieren (Rust oder C++ für Performance)
-- [ ] Client-Projekt initialisieren (Electron + React/Vue oder Tauri)
+- [ ] App-Projekt initialisieren (Tauri + Svelte für lokale UI)
+- [ ] Remote-Projekt initialisieren (Tauri + Svelte für Fernsteuerung)
 - [ ] Shared Types/Protokolle definieren
-- [ ] CI/CD Pipeline einrichten (GitHub Actions)
+- [ ] Jenkins Pipeline einrichten (Jenkinsfile)
+- [ ] Build-Agents konfigurieren (Windows, Linux, Android)
 - [ ] Docker-Container für Server vorbereiten
 - [ ] Dokumentationsstruktur anlegen
+
+#### 1.1.1 CI/CD Pipeline (Jenkins)
+- [ ] Jenkinsfile konfigurieren
+- [ ] Windows Agent einrichten (auf Jenkins Server)
+- [ ] Linux Agent einrichten (VM oder Docker)
+- [ ] Android Build-Umgebung (SDK, NDK)
+- [ ] Raspberry Pi ARM64 Cross-Compile
+- [ ] Inno Setup für Windows Installer
+- [ ] cargo-deb für Linux .deb Pakete
+- [ ] APK Signing konfigurieren
+- [ ] Artifact-Archivierung
+- [ ] Optional: macOS Agent für .dmg
 
 #### 1.2 Audio-Engine Kern
 - [ ] Audio-Processing-Framework auswählen (JUCE, PortAudio, oder eigene Implementierung)
@@ -530,14 +544,19 @@ audiomultiverse/
 ├── deploy/                    # 🚀 Deployment
 │   ├── docker/
 │   ├── systemd/
-│   └── raspberry-pi/
+│   ├── raspberry-pi/
+│   ├── jenkins/              # Jenkins Agent Dokumentation
+│   │   └── AGENTS.md
+│   └── innosetup/            # Windows Installer
+│       └── remote.iss
 │
 ├── .github/
-│   └── workflows/            # CI/CD
+│   └── workflows/            # GitHub Actions (optional)
 │       ├── build-server.yml
 │       ├── build-app.yml
 │       └── build-remote.yml
 │
+├── Jenkinsfile               # CI/CD Pipeline (Haupt-Build)
 ├── pnpm-workspace.yaml       # Monorepo Config
 ├── package.json              # Root package.json
 ├── README.md
