@@ -82,6 +82,11 @@ pub struct AudioCommandSender {
 }
 
 impl AudioCommandSender {
+    /// Erstellt einen AudioCommandSender aus einem existierenden Sender
+    pub fn from_sender(tx: mpsc::Sender<AudioCommand>) -> Self {
+        Self { tx }
+    }
+    
     /// Subscribe to an AES67 stream
     pub async fn subscribe_stream(&self, stream_id: String, start_channel: Option<u32>) -> Result<Aes67SubscribeResult, String> {
         let (response_tx, response_rx) = tokio::sync::oneshot::channel();
@@ -133,6 +138,11 @@ impl AudioEngine {
         let (tx, rx) = mpsc::channel(32);
         self.command_rx = Some(rx);
         AudioCommandSender { tx }
+    }
+    
+    /// Command-Receiver setzen (wenn Channel extern erstellt wurde)
+    pub fn set_command_receiver(&mut self, rx: mpsc::Receiver<AudioCommand>) {
+        self.command_rx = Some(rx);
     }
     
     /// Pending Commands verarbeiten (sollte regelmäßig aufgerufen werden)

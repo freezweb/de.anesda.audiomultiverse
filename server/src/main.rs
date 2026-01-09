@@ -25,9 +25,10 @@ use tracing_subscriber::FmtSubscriber;
 
 use crate::config::ServerConfig;
 use crate::mixer::{Mixer, SceneManager, MasterSection};
-use crate::audio::AudioEngine;
+use crate::audio::{AudioEngine, AudioCommandSender};
 use crate::midi::MidiController;
 use crate::api::start_api_server;
+use crate::network_audio::{SapDiscovery, PtpClock};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -65,72 +66,98 @@ async fn main() -> Result<()> {
     let scene_manager = Arc::new(RwLock::new(SceneManager::new(&scenes_path)));
     info!("Szenen-Manager initialisiert: {}", scenes_path);
 
-    // Audio-Engine initialisieren
-    let mut audio_engine = AudioEngine::new(
-        config.audio.sample_rate,
-        config.audio.buffer_size,
-    );
-    audio_engine.set_mixer(mixer.clone());
-    audio_engine.set_master(master.clone());
+    // Audio-Engine Konfiguration für den Thread vorbereiten
+    let audio_sample_rate = config.audio.sample_rate;
+    let audio_buffer_size = config.audio.buffer_size;
+    let audio_enabled = config.audio.enabled;
+    let aes67_enabled = config.audio.aes67_enabled.unwrap_or(true);
+    let mixer_for_audio = mixer.clone();
+    let master_for_audio = master.clone();
     
-    // Audio-Geräte auflisten
-    info!("Verfügbare Audio-Geräte:");
-    for device in audio_engine.list_devices() {
-        let flags = format!(
-            "{}{}{}",
-            if device.is_input { "I" } else { "-" },
-            if device.is_output { "O" } else { "-" },
-            if device.is_default { "*" } else { "" }
-        );
-        info!("   [{}] {}", flags, device.name);
-    }
-
-    // Audio-Engine starten
-    if config.audio.enabled {
-        match audio_engine.start() {
-            Ok(_) => info!("Audio-Engine gestartet"),
-            Err(e) => info!("Audio-Engine konnte nicht gestartet werden: {} (kein Audio-Passthrough)", e),
+    // Command-Channel erstellen (Sender bleibt hier, Receiver geht in den Thread)
+    let (cmd_tx, cmd_rx) = tokio::sync::mpsc::channel::<crate::audio::AudioCommand>(32);
+    let audio_cmd = AudioCommandSender::from_sender(cmd_tx);
+    
+    // Channels für SAP/PTP Referenzen aus dem Audio-Thread
+    let (sap_tx, sap_rx) = std::sync::mpsc::channel::<Option<Arc<SapDiscovery>>>();
+    let (ptp_tx, ptp_rx) = std::sync::mpsc::channel::<Option<Arc<PtpClock>>>();
+    
+    // Audio Engine komplett im eigenen Thread erstellen und starten
+    // Damit vermeiden wir das Send-Problem mit cpal::Stream
+    let audio_running = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let audio_running_clone = audio_running.clone();
+    
+    let audio_thread = std::thread::spawn(move || {
+        info!("🔊 Audio-Thread gestartet");
+        
+        // AudioEngine HIER erstellen (nicht im Hauptthread)
+        let mut audio_engine = AudioEngine::new(audio_sample_rate, audio_buffer_size);
+        audio_engine.set_mixer(mixer_for_audio);
+        audio_engine.set_master(master_for_audio);
+        audio_engine.set_command_receiver(cmd_rx);
+        
+        // Audio-Geräte auflisten
+        info!("Verfügbare Audio-Geräte:");
+        for device in audio_engine.list_devices() {
+            let flags = format!(
+                "{}{}{}",
+                if device.is_input { "I" } else { "-" },
+                if device.is_output { "O" } else { "-" },
+                if device.is_default { "*" } else { "" }
+            );
+            info!("   [{}] {}", flags, device.name);
         }
-    }
 
-    // AES67 Network Audio initialisieren
-    if config.audio.aes67_enabled.unwrap_or(true) {
-        match audio_engine.init_aes67(None) {
-            Ok(_) => {
-                info!("🌐 AES67 Network Audio initialisiert");
-                
-                // Warte kurz und zeige entdeckte Geräte
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                match audio_engine.discover_aes67_devices() {
-                    Ok(devices) => {
-                        if devices.is_empty() {
-                            info!("   Keine AES67 Geräte im Netzwerk gefunden (noch)");
-                        } else {
-                            info!("   {} AES67 Gerät(e) gefunden:", devices.len());
-                            for device in &devices {
-                                info!("     - {} ({} channels)", device.name, device.channels);
-                            }
-                        }
-                    }
-                    Err(e) => info!("   Fehler bei AES67 Discovery: {}", e),
+        // Audio-Engine starten
+        if audio_enabled {
+            match audio_engine.start() {
+                Ok(_) => info!("Audio-Engine gestartet"),
+                Err(e) => info!("Audio-Engine konnte nicht gestartet werden: {} (kein Audio-Passthrough)", e),
+            }
+        }
+
+        // AES67 Network Audio initialisieren
+        if aes67_enabled {
+            match audio_engine.init_aes67(None) {
+                Ok(_) => {
+                    info!("🌐 AES67 Network Audio initialisiert");
+                }
+                Err(e) => info!("AES67 konnte nicht initialisiert werden: {} (nur lokales Audio)", e),
+            }
+        }
+        
+        // SAP/PTP Referenzen an Hauptthread senden
+        let _ = sap_tx.send(audio_engine.sap_discovery());
+        let _ = ptp_tx.send(audio_engine.ptp_clock());
+        
+        // Command-Loop
+        while audio_running_clone.load(std::sync::atomic::Ordering::Relaxed) {
+            audio_engine.process_commands();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        
+        info!("🔊 Audio-Thread beendet");
+    });
+    
+    // Warte auf SAP/PTP Referenzen vom Audio-Thread
+    let sap_discovery = sap_rx.recv().ok().flatten();
+    let ptp_clock = ptp_rx.recv().ok().flatten();
+    
+    // Kurz warten für AES67 Discovery
+    if sap_discovery.is_some() {
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        if let Some(ref sap) = sap_discovery {
+            let streams = sap.streams();
+            if streams.is_empty() {
+                info!("   Keine AES67 Geräte im Netzwerk gefunden (noch)");
+            } else {
+                info!("   {} AES67 Gerät(e) gefunden:", streams.len());
+                for stream in &streams {
+                    info!("     - {} ({} channels)", stream.name, stream.channels);
                 }
             }
-            Err(e) => info!("AES67 konnte nicht initialisiert werden: {} (nur lokales Audio)", e),
         }
     }
-
-    // AES67-Referenzen für API Server extrahieren
-    let (sap_discovery, ptp_clock) = (
-        audio_engine.sap_discovery(),
-        audio_engine.ptp_clock(),
-    );
-    
-    // Command-Sender für Echtzeit-Steuerung
-    // Hinweis: AudioEngine ist nicht Send wegen cpal::Stream, daher können wir
-    // keine Commands asynchron verarbeiten. Für echte Echtzeit-Subscription
-    // müsste das Audio-System komplett überarbeitet werden.
-    // Aktuell: SAP Discovery und PTP Status funktionieren, Subscribe ist TODO.
-    let audio_cmd: Option<crate::audio::AudioCommandSender> = None;
 
     // MIDI initialisieren
     let mut midi_controller = MidiController::new();
@@ -174,8 +201,12 @@ async fn main() -> Result<()> {
         master.clone(),
         sap_discovery,
         ptp_clock,
-        audio_cmd,
+        Some(audio_cmd),
     ).await?;
+    
+    // Cleanup: Audio-Thread stoppen
+    audio_running.store(false, std::sync::atomic::Ordering::Relaxed);
+    let _ = audio_thread.join();
 
     Ok(())
 }
