@@ -53,6 +53,9 @@ pipeline {
                         bat '''
                             @echo off
                             
+                            REM Rust und MinGW zum PATH hinzufügen
+                            set PATH=%USERPROFILE%\.cargo\bin;C:\msys64\mingw64\bin;%PATH%
+                            
                             REM Node.js prüfen
                             where node >nul 2>&1 || (
                                 echo Node.js nicht gefunden!
@@ -61,9 +64,12 @@ pipeline {
                             
                             REM Rust prüfen  
                             where rustc >nul 2>&1 || (
-                                echo Rust nicht gefunden!
+                                echo Rust nicht gefunden! Bitte installiere Rust: https://rustup.rs
                                 exit /b 1
                             )
+                            
+                            rustc --version
+                            cargo --version
                             
                             REM Dependencies installieren
                             cd app
@@ -74,7 +80,7 @@ pipeline {
                         dir('app') {
                             bat '''
                                 @echo off
-                                set PATH=C:\\msys64\\mingw64\\bin;%PATH%
+                                set PATH=%USERPROFILE%\.cargo\bin;C:\msys64\mingw64\bin;%PATH%
                                 call npx tauri build
                             '''
                         }
@@ -112,7 +118,7 @@ pipeline {
                         dir('server') {
                             bat '''
                                 @echo off
-                                set PATH=C:\\msys64\\mingw64\\bin;%PATH%
+                                set PATH=%USERPROFILE%\.cargo\bin;C:\msys64\mingw64\bin;%PATH%
                                 cargo build --release
                             '''
                         }
@@ -138,9 +144,17 @@ pipeline {
                 
                 // --------------------------------------------------------
                 // Linux Server & App (.deb Pakete)
+                // HINWEIS: Erfordert einen Linux-Agent mit Label 'linux'
                 // --------------------------------------------------------
                 
                 stage('Linux Packages') {
+                    when {
+                        beforeAgent true
+                        expression { 
+                            // Nur bauen wenn Linux-Agent verfügbar
+                            return false  // Deaktiviert bis Linux-Agent vorhanden
+                        }
+                    }
                     agent { label 'linux' }
                     
                     steps {
