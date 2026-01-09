@@ -9,7 +9,7 @@ use tracing::{info, warn, error};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Host, Stream, StreamConfig, SampleFormat};
 
-use crate::mixer::Mixer;
+use crate::mixer::{Mixer, MasterSection};
 
 /// Audio Device Info
 #[derive(Debug, Clone)]
@@ -29,6 +29,7 @@ pub struct AudioEngine {
     input_stream: Option<Stream>,
     output_stream: Option<Stream>,
     mixer: Option<Arc<Mixer>>,
+    master: Option<Arc<MasterSection>>,
 }
 
 impl AudioEngine {
@@ -44,12 +45,18 @@ impl AudioEngine {
             input_stream: None,
             output_stream: None,
             mixer: None,
+            master: None,
         }
     }
 
     /// Mixer-Referenz setzen
     pub fn set_mixer(&mut self, mixer: Arc<Mixer>) {
         self.mixer = Some(mixer);
+    }
+
+    /// Master-Sektion setzen
+    pub fn set_master(&mut self, master: Arc<MasterSection>) {
+        self.master = Some(master);
     }
 
     /// Engine starten
@@ -76,6 +83,8 @@ impl AudioEngine {
         let (producer, consumer) = create_ring_buffer(self.buffer_size * 4);
         
         let mixer = self.mixer.clone();
+        let master = self.master.clone();
+        let sample_rate = self.sample_rate as f32;
         let running = self.running.clone();
         
         // Input Stream
@@ -91,6 +100,9 @@ impl AudioEngine {
             None,
         )?;
         
+        // Oszillator-Phase für Master (muss im Closure bleiben)
+        let mut osc_phase = 0.0f32;
+        
         // Output Stream
         let output_stream = output_device.build_output_stream(
             &config,
@@ -100,9 +112,14 @@ impl AudioEngine {
                     *sample = consumer.try_pop().unwrap_or(0.0);
                 }
                 
-                // Mixer-Processing anwenden
+                // Channel-Mixer-Processing anwenden
                 if let Some(ref mixer) = mixer {
-                    process_audio(data, mixer, 2);
+                    process_channels(data, mixer, 2);
+                }
+                
+                // Master-Processing anwenden (Limiter, Mono, Oszillator etc.)
+                if let Some(ref master) = master {
+                    process_master(data, master, &mut osc_phase, sample_rate, 2);
                 }
             },
             |err| error!("Output Stream Fehler: {}", err),
@@ -252,8 +269,8 @@ fn create_ring_buffer(capacity: usize) -> (Producer, Consumer) {
     )
 }
 
-/// Audio-Processing im Output-Callback
-fn process_audio(output: &mut [f32], mixer: &Mixer, channels: usize) {
+/// Audio-Processing im Output-Callback (Channel-Mixer)
+fn process_channels(output: &mut [f32], mixer: &Mixer, channels: usize) {
     let channel_states = mixer.get_all_channels();
     
     // Für jeden Sample-Frame
@@ -276,6 +293,37 @@ fn process_audio(output: &mut [f32], mixer: &Mixer, channels: usize) {
                 // Meter aktualisieren (Peak)
                 mixer.update_meter(ch as u32, output[idx].abs());
             }
+        }
+    }
+}
+
+/// Master-Processing im Output-Callback (Limiter, Mono, Oszillator, Gain)
+fn process_master(output: &mut [f32], master: &MasterSection, osc_phase: &mut f32, sample_rate: f32, channels: usize) {
+    // Verarbeite Stereo-Paare (2 Kanäle)
+    if channels >= 2 {
+        let frames = output.len() / channels;
+        
+        for frame in 0..frames {
+            let left_idx = frame * channels;
+            let right_idx = frame * channels + 1;
+            
+            if left_idx < output.len() && right_idx < output.len() {
+                let left = output[left_idx];
+                let right = output[right_idx];
+                
+                // MasterSection-Processing anwenden (Oszillator, Mono, Gain, Limiter)
+                let (out_left, out_right) = master.process(left, right, osc_phase, sample_rate);
+                
+                output[left_idx] = out_left;
+                output[right_idx] = out_right;
+            }
+        }
+    } else if channels == 1 {
+        // Mono-Processing
+        for idx in 0..output.len() {
+            let sample = output[idx];
+            let (out_left, _) = master.process(sample, sample, osc_phase, sample_rate);
+            output[idx] = out_left;
         }
     }
 }

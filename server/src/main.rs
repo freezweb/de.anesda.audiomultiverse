@@ -70,6 +70,7 @@ async fn main() -> Result<()> {
         config.audio.buffer_size,
     );
     audio_engine.set_mixer(mixer.clone());
+    audio_engine.set_master(master.clone());
     
     // Audio-Geräte auflisten
     info!("Verfügbare Audio-Geräte:");

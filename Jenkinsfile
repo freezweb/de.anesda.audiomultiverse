@@ -154,13 +154,6 @@ pipeline {
                 // --------------------------------------------------------
                 
                 stage('Linux Packages') {
-                    when {
-                        beforeAgent true
-                        expression { 
-                            // Nur bauen wenn Linux-Agent verfügbar
-                            return false  // Deaktiviert bis Linux-Agent vorhanden
-                        }
-                    }
                     agent { label 'linux' }
                     
                     steps {
