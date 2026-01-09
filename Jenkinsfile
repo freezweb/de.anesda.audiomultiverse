@@ -156,6 +156,10 @@ pipeline {
                 stage('Linux Packages') {
                     agent { label 'linux' }
                     
+                    options {
+                        skipDefaultCheckout()
+                    }
+                    
                     steps {
                         unstash 'source'
                         
@@ -168,6 +172,7 @@ pipeline {
                             # System Dependencies für Tauri
                             sudo apt-get update
                             sudo apt-get install -y \
+                                build-essential \
                                 libwebkit2gtk-4.1-dev \
                                 libappindicator3-dev \
                                 librsvg2-dev \
