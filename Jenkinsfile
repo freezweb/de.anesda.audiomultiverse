@@ -156,6 +156,10 @@ pipeline {
                 stage('Linux Packages') {
                     agent { label 'linux' }
                     
+                    options {
+                        skipDefaultCheckout()
+                    }
+                    
                     steps {
                         // Manueller Git-Clone da Jenkins git.exe statt git verwendet
                         sh '''
