@@ -50,7 +50,7 @@ pipeline {
                         unstash 'source'
                         
                         echo '=== Installing Dependencies ==='
-                        bat '''
+                        bat """
                             @echo off
                             setlocal enabledelayedexpansion
                             
@@ -58,7 +58,8 @@ pipeline {
                             set PATH=%USERPROFILE%\\.cargo\\bin;C:\\msys64\\mingw64\\bin;%PATH%
                             
                             REM Node.js pruefen
-                            where node >nul 2>&1 || (
+                            where node >nul 2>&1
+                            if errorlevel 1 (
                                 echo Node.js nicht gefunden!
                                 exit /b 1
                             )
@@ -79,24 +80,24 @@ pipeline {
                             REM Dependencies installieren
                             cd app
                             call npm install
-                        '''
+                        """
                         
                         echo '=== Building Windows App ==='
                         dir('app') {
-                            bat '''
+                            bat """
                                 @echo off
                                 set PATH=%USERPROFILE%\\.cargo\\bin;C:\\msys64\\mingw64\\bin;%PATH%
                                 call npx tauri build
-                            '''
+                            """
                         }
                         
                         echo '=== Collecting Windows App Artifacts ==='
-                        bat '''
+                        bat """
                             @echo off
                             mkdir dist\\windows\\app 2>nul
                             xcopy /Y app\\src-tauri\\target\\release\\bundle\\msi\\*.msi dist\\windows\\app\\
                             xcopy /Y app\\src-tauri\\target\\release\\bundle\\nsis\\*.exe dist\\windows\\app\\
-                        '''
+                        """
                         
                         archiveArtifacts artifacts: 'dist/windows/app/*', fingerprint: true
                         stash includes: 'dist/windows/app/*', name: 'windows-app'
@@ -121,20 +122,20 @@ pipeline {
                         
                         echo '=== Building Windows Server ==='
                         dir('server') {
-                            bat '''
+                            bat """
                                 @echo off
                                 set PATH=%USERPROFILE%\\.cargo\\bin;C:\\msys64\\mingw64\\bin;%PATH%
                                 cargo build --release
-                            '''
+                            """
                         }
                         
                         echo '=== Collecting Server Artifacts ==='
-                        bat '''
+                        bat """
                             @echo off
                             mkdir dist\\windows\\server 2>nul
                             xcopy /Y server\\target\\release\\audiomultiverse-server.exe dist\\windows\\server\\
                             xcopy /Y server\\config.toml.example dist\\windows\\server\\
-                        '''
+                        """
                         
                         archiveArtifacts artifacts: 'dist/windows/server/*', fingerprint: true
                         stash includes: 'dist/windows/server/*', name: 'windows-server'
@@ -249,11 +250,11 @@ pipeline {
                 bat 'dir /s /b dist'
                 
                 // Release-Ordner erstellen
-                bat '''
+                bat """
                     @echo off
-                    mkdir release\\%APP_VERSION% 2>nul
-                    xcopy /E /Y dist\\* release\\%APP_VERSION%\\
-                '''
+                    mkdir release\\\\${APP_VERSION} 2>nul
+                    xcopy /E /Y dist\\\\* release\\\\${APP_VERSION}\\\\
+                """
                 
                 archiveArtifacts artifacts: 'release/**/*', fingerprint: true
             }
