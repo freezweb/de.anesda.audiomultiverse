@@ -55,7 +55,7 @@ pipeline {
                             setlocal enabledelayedexpansion
                             
                             REM Rust und MinGW zum PATH hinzufuegen
-                            set "PATH=%USERPROFILE%\.cargo\bin;C:\msys64\mingw64\bin;%PATH%"
+                            set "PATH=%USERPROFILE%\\.cargo\\bin;C:\\msys64\\mingw64\\bin;%PATH%"
                             
                             REM Node.js pruefen
                             where node >nul 2>&1
@@ -71,7 +71,7 @@ pipeline {
                                 curl -sSf -o rustup-init.exe https://win.rustup.rs/x86_64
                                 rustup-init.exe -y --default-toolchain stable-x86_64-pc-windows-gnu
                                 del rustup-init.exe
-                                set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
+                                set "PATH=%USERPROFILE%\\.cargo\\bin;%PATH%"
                             )
                             
                             rustc --version
@@ -86,7 +86,7 @@ pipeline {
                         dir('app') {
                             bat '''
                                 @echo off
-                                set "PATH=%USERPROFILE%\.cargo\bin;C:\msys64\mingw64\bin;%PATH%"
+                                set "PATH=%USERPROFILE%\\.cargo\\bin;C:\\msys64\\mingw64\\bin;%PATH%"
                                 call npx tauri build
                             '''
                         }
@@ -94,9 +94,9 @@ pipeline {
                         echo '=== Collecting Windows App Artifacts ==='
                         bat '''
                             @echo off
-                            mkdir dist\windows\app 2>nul
-                            xcopy /Y app\src-tauri\target\release\bundle\msi\*.msi dist\windows\app\
-                            xcopy /Y app\src-tauri\target\release\bundle\nsis\*.exe dist\windows\app\
+                            mkdir dist\\windows\\app 2>nul
+                            xcopy /Y app\\src-tauri\\target\\release\\bundle\\msi\\*.msi dist\\windows\\app\\
+                            xcopy /Y app\\src-tauri\\target\\release\\bundle\\nsis\\*.exe dist\\windows\\app\\
                         '''
                         
                         archiveArtifacts artifacts: 'dist/windows/app/*', fingerprint: true
@@ -124,7 +124,7 @@ pipeline {
                         dir('server') {
                             bat '''
                                 @echo off
-                                set "PATH=%USERPROFILE%\.cargo\bin;C:\msys64\mingw64\bin;%PATH%"
+                                set "PATH=%USERPROFILE%\\.cargo\\bin;C:\\msys64\\mingw64\\bin;%PATH%"
                                 cargo build --release
                             '''
                         }
@@ -132,9 +132,9 @@ pipeline {
                         echo '=== Collecting Server Artifacts ==='
                         bat '''
                             @echo off
-                            mkdir dist\windows\server 2>nul
-                            xcopy /Y server\target\release\audiomultiverse-server.exe dist\windows\server\
-                            xcopy /Y server\config.toml.example dist\windows\server\
+                            mkdir dist\\\\windows\\\\server 2>nul
+                            xcopy /Y server\\\\target\\\\release\\\\audiomultiverse-server.exe dist\\\\windows\\\\server\\\\
+                            xcopy /Y server\\\\config.toml.example dist\\\\windows\\\\server\\\\
                         '''
                         
                         archiveArtifacts artifacts: 'dist/windows/server/*', fingerprint: true
