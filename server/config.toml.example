@@ -1,0 +1,39 @@
+# AudioMultiverse Server Configuration
+
+[server]
+# WebSocket & API Port
+port = 9000
+# Bind address (0.0.0.0 for all interfaces)
+bind = "0.0.0.0"
+
+[audio]
+# Sample rate in Hz
+sample_rate = 48000
+# Buffer size in samples
+buffer_size = 256
+# Number of input channels
+input_channels = 32
+# Number of output channels
+output_channels = 32
+
+[audio.backend]
+# Backend type: "cpal", "jack", "pipewire"
+type = "cpal"
+
+[midi]
+# Enable MIDI support
+enabled = true
+# Auto-connect to all MIDI devices
+auto_connect = true
+
+[network_audio]
+# Network audio backend: "aes67", "dante" (requires license)
+backend = "aes67"
+# PTP domain for IEEE 1588 clock sync
+ptp_domain = 0
+
+[logging]
+# Log level: "trace", "debug", "info", "warn", "error"
+level = "info"
+# Log to file
+file = "/var/log/audiomultiverse/server.log"

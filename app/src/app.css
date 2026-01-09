@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+	--fader-track-color: #3d3d3d;
+	--fader-thumb-color: #888;
+	--fader-thumb-active: #aaa;
+}
+
+/* Scrollbar verstecken für Touch */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: var(--fader-track-color);
+}
+
+::-webkit-scrollbar-thumb {
+	background: #555;
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: #666;
+}
+
+/* Touch-Optimierung */
+* {
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+}
+
+/* Prevent text selection on touch */
+.no-select {
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+/* Fader Track */
+.fader-track {
+	background: linear-gradient(
+		to top,
+		#1a1a1a 0%,
+		#2d2d2d 10%,
+		#2d2d2d 90%,
+		#1a1a1a 100%
+	);
+}
+
+/* Meter Gradient */
+.meter-gradient {
+	background: linear-gradient(
+		to top,
+		#22c55e 0%,
+		#22c55e 60%,
+		#eab308 60%,
+		#eab308 85%,
+		#ef4444 85%,
+		#ef4444 100%
+	);
+}

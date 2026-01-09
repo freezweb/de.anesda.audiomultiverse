@@ -21,26 +21,26 @@ Ein virtuelles, softwarebasiertes Mischpult mit nativer DANTE-Unterstützung, MI
 ### Phase 1: Grundlagen & Architektur
 
 #### 1.1 Projektstruktur
-- [ ] Monorepo-Struktur aufsetzen (pnpm workspaces oder Nx)
-- [ ] Server-Projekt initialisieren (Rust oder C++ für Performance)
-- [ ] App-Projekt initialisieren (Tauri + Svelte für lokale UI)
-- [ ] Remote-Projekt initialisieren (Tauri + Svelte für Fernsteuerung)
-- [ ] Shared Types/Protokolle definieren
-- [ ] Jenkins Pipeline einrichten (Jenkinsfile)
-- [ ] Build-Agents konfigurieren (Windows, Linux, Android)
+- [x] Monorepo-Struktur aufsetzen (pnpm workspaces)
+- [x] Server-Projekt initialisieren (Rust mit Axum, tokio)
+- [x] App-Projekt initialisieren (Tauri + Svelte für lokale UI)
+- [x] Remote-Projekt initialisieren (Tauri + Svelte für Fernsteuerung)
+- [x] Shared Types/Protokolle definieren (shared/protocol)
+- [x] Jenkins Pipeline einrichten (Jenkinsfile)
+- [x] Build-Agents Dokumentation (docs/jenkins-agent-setup.md)
 - [ ] Docker-Container für Server vorbereiten
-- [ ] Dokumentationsstruktur anlegen
+- [x] Dokumentationsstruktur angelegt
 
 #### 1.1.1 CI/CD Pipeline (Jenkins)
-- [ ] Jenkinsfile konfigurieren
-- [ ] Windows Agent einrichten (auf Jenkins Server)
-- [ ] Linux Agent einrichten (VM oder Docker)
-- [ ] Android Build-Umgebung (SDK, NDK)
-- [ ] Raspberry Pi ARM64 Cross-Compile
-- [ ] Inno Setup für Windows Installer
-- [ ] cargo-deb für Linux .deb Pakete
+- [x] Jenkinsfile konfigurieren
+- [x] Windows Agent Dokumentation
+- [x] Linux Agent Dokumentation
+- [ ] Android Build-Umgebung (SDK, NDK) - dokumentiert
+- [ ] Raspberry Pi ARM64 Cross-Compile - dokumentiert
+- [x] Inno Setup Script (deploy/windows/installer.iss)
+- [x] cargo-deb für Linux .deb Pakete
 - [ ] APK Signing konfigurieren
-- [ ] Artifact-Archivierung
+- [x] Artifact-Archivierung im Jenkinsfile
 - [ ] Optional: macOS Agent für .dmg
 
 #### 1.2 Audio-Engine Kern
@@ -93,24 +93,24 @@ Ein virtuelles, softwarebasiertes Mischpult mit nativer DANTE-Unterstützung, MI
 ### Phase 2: Mixer-Kernfunktionen
 
 #### 2.1 Kanal-Strip Implementierung
-- [ ] Input Gain (-∞ bis +20dB)
+- [x] Input Gain (-∞ bis +20dB) - Grundstruktur
 - [ ] Phase Invert (Ø)
 - [ ] Phantom Power Status (nur Anzeige, DANTE-seitig)
-- [ ] High-Pass Filter (schaltbar, 80Hz/120Hz)
-- [ ] 3-Band EQ (später erweiterbar)
-  - [ ] Low Shelf (80Hz)
-  - [ ] Mid Parametric (250Hz - 5kHz)
-  - [ ] High Shelf (12kHz)
-- [ ] Pan/Balance (-100L bis +100R)
-- [ ] Fader (-∞ bis +10dB, 1024 Stufen Auflösung)
-- [ ] Mute-Button
-- [ ] Solo-Button (PFL/AFL umschaltbar)
-- [ ] Kanal-Benennung (frei editierbar)
-- [ ] Kanal-Farbe (zur visuellen Gruppierung)
+- [x] High-Pass Filter (schaltbar, 80Hz/120Hz)
+- [x] 3-Band EQ (später erweiterbar) - 4-Band parametrischer EQ
+  - [x] Low Shelf (80Hz)
+  - [x] Mid Parametric (250Hz - 5kHz)
+  - [x] High Shelf (12kHz)
+- [x] Pan/Balance (-100L bis +100R)
+- [x] Fader (-∞ bis +10dB, Logarithmisch)
+- [x] Mute-Button
+- [x] Solo-Button (PFL/AFL umschaltbar)
+- [x] Kanal-Benennung (frei editierbar)
+- [x] Kanal-Farbe (zur visuellen Gruppierung)
 
 #### 2.2 Routing-Matrix
-- [ ] Vollständige NxM Matrix (32x32 Standard)
-- [ ] Matrix-Ansicht (Kreuzschienen-Stil)
+- [x] Vollständige NxM Matrix (32x32 Standard)
+- [x] Matrix-Ansicht (Kreuzschienen-Stil) - RoutingMatrix.svelte
 - [ ] Direkt-Routing pro Kanal
 - [ ] Bus-System
   - [ ] Stereo Master Bus
@@ -121,12 +121,12 @@ Ein virtuelles, softwarebasiertes Mischpult mit nativer DANTE-Unterstützung, MI
 - [ ] "Follow Main" Option für Outputs
 
 #### 2.3 Master-Sektion
-- [ ] Stereo Master Fader
-- [ ] Master-Limiter (Schutz)
-- [ ] Talkback-Funktion (mit externem Mic)
-- [ ] DIM-Funktion (-20dB)
-- [ ] Mono-Summen-Check
-- [ ] Oscillator (1kHz Testton)
+- [x] Stereo Master Fader
+- [x] Master-Limiter (Schutz)
+- [x] Talkback-Funktion (mit externem Mic)
+- [x] DIM-Funktion (-20dB)
+- [x] Mono-Summen-Check
+- [x] Oscillator (1kHz Testton)
 
 #### 2.4 Metering & Monitoring
 - [ ] Peak-Meter pro Kanal (12-Segment LED-Stil)
@@ -141,15 +141,15 @@ Ein virtuelles, softwarebasiertes Mischpult mit nativer DANTE-Unterstützung, MI
 ### Phase 3: MIDI-Integration
 
 #### 3.1 MIDI-Grundlagen
-- [ ] MIDI-Backend auswählen (RtMidi, JUCE MIDI, oder PortMidi)
-- [ ] MIDI-Geräte-Erkennung (Hot-Plug)
-- [ ] MIDI-Learn-Funktion
-- [ ] MIDI-Mapping speichern/laden
-- [ ] Multi-Device Support
+- [x] MIDI-Backend auswählen (RtMidi, JUCE MIDI, oder PortMidi) - midir
+- [x] MIDI-Geräte-Erkennung (Hot-Plug)
+- [x] MIDI-Learn-Funktion
+- [x] MIDI-Mapping speichern/laden
+- [x] Multi-Device Support
 
 #### 3.2 MIDI-Controller Support
-- [ ] Generic CC-Mapping
-- [ ] Mackie Control Universal (MCU) Protokoll
+- [x] Generic CC-Mapping
+- [x] Mackie Control Universal (MCU) Protokoll
 - [ ] HUI Protokoll (optional)
 - [ ] Behringer X-Touch Unterstützung
 - [ ] Korg nanoKONTROL Support
@@ -157,11 +157,11 @@ Ein virtuelles, softwarebasiertes Mischpult mit nativer DANTE-Unterstützung, MI
 - [ ] Custom Controller Profile erstellen
 
 #### 3.3 MIDI-Feedback
-- [ ] Fader-Position senden (motorisierte Fader)
-- [ ] LED-Ring Feedback (für Encoder)
-- [ ] Mute/Solo LED Status
-- [ ] Meter-Daten über MIDI (für Controller mit Displays)
-- [ ] Kanal-Namen über SysEx (MCU-kompatibel)
+- [x] Fader-Position senden (motorisierte Fader)
+- [x] LED-Ring Feedback (für Encoder)
+- [x] Mute/Solo LED Status
+- [x] Meter-Daten über MIDI (für Controller mit Displays)
+- [x] Kanal-Namen über SysEx (MCU-kompatibel)
 
 #### 3.4 MIDI-Erweiterungen
 - [ ] OSC-to-MIDI Bridge
@@ -183,12 +183,12 @@ Ein virtuelles, softwarebasiertes Mischpult mit nativer DANTE-Unterstützung, MI
 - [ ] Responsive Layout (Desktop + Tablet)
 
 #### 4.2 Hauptansichten
-- [ ] **Mixer-View**: Traditionelle Kanalzug-Ansicht
-- [ ] **Matrix-View**: Routing-Kreuzschiene
-- [ ] **Meters-View**: Großes Meter-Display
-- [ ] **Settings-View**: Konfiguration
-- [ ] **Scenes-View**: Preset-Verwaltung
-- [ ] View-Tabs oder Split-Screen
+- [x] **Mixer-View**: Traditionelle Kanalzug-Ansicht
+- [x] **Matrix-View**: Routing-Kreuzschiene
+- [x] **Meters-View**: Großes Meter-Display
+- [x] **Settings-View**: Konfiguration
+- [x] **Scenes-View**: Preset-Verwaltung
+- [x] View-Tabs oder Split-Screen
 
 #### 4.3 Mixer-View Details
 - [ ] Skalierbare Kanalbreite
@@ -360,7 +360,7 @@ Ein virtuelles, softwarebasiertes Mischpult mit nativer DANTE-Unterstützung, MI
 | Database | **SQLite** | Embedded, kein Setup |
 | Config | **TOML** | Lesbar, Rust-nativ |
 
-### Client (Haupt-App am Server - Linux)
+### Client (Haupt-App am Client - Linux)
 | Komponente | Technologie | Begründung |
 |------------|-------------|------------|
 | Framework | **Tauri** | Rust-Backend, WebView UI, klein |
@@ -398,7 +398,7 @@ Ein virtuelles, softwarebasiertes Mischpult mit nativer DANTE-Unterstützung, MI
 - [ ] AES67 Input funktioniert (DANTE-Hardware im AES67-Modus)
 - [ ] Basis-UI (Fader, Mute, Meter)
 - [ ] MIDI-Learn für Fader
-- [ ] Läuft auf Linux Desktop
+- [ ] Läuft auf Windows Desktop
 
 ### Version 1.0 - ~6 Monate
 - [ ] 32x32 Matrix vollständig (4x 8-Kanal AES67 Streams)

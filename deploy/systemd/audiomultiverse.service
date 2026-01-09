@@ -1,0 +1,32 @@
+[Unit]
+Description=AudioMultiverse Server - Virtual AES67/DANTE Mixer
+Documentation=https://github.com/freezweb/de.anesda.audiomultiverse
+After=network.target sound.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=audiomultiverse
+Group=audio
+ExecStart=/usr/bin/audiomultiverse-server
+WorkingDirectory=/var/lib/audiomultiverse
+Restart=always
+RestartSec=5
+
+# Realtime-Priorität für Audio
+Nice=-10
+LimitRTPRIO=99
+LimitMEMLOCK=infinity
+
+# Umgebungsvariablen
+Environment=RUST_LOG=info
+Environment=RUST_BACKTRACE=1
+
+# Sicherheit
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/audiomultiverse /etc/audiomultiverse
+
+[Install]
+WantedBy=multi-user.target
