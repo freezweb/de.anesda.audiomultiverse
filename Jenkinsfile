@@ -180,6 +180,122 @@ pipeline {
                 }
                 
                 // --------------------------------------------------------
+                // Android Remote App (APK)
+                // Läuft auf Windows mit Android SDK
+                // --------------------------------------------------------
+                
+                stage('Android Remote') {
+                    agent { label 'windows' }
+                    
+                    environment {
+                        ANDROID_HOME = 'C:\\Program Files (x86)\\Android\\android-sdk'
+                        JAVA_HOME = 'C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.16.8-hotspot'
+                        PATH = "${env.ANDROID_HOME}\\platform-tools;${env.ANDROID_HOME}\\build-tools\\35.0.0;${env.JAVA_HOME}\\bin;${env.PATH}"
+                        VERSION_CODE = "${env.BUILD_NUMBER}"
+                    }
+                    
+                    steps {
+                        unstash 'source'
+                        
+                        echo "=== Setting Version to ${APP_VERSION} ==="
+                        bat """
+                            @echo off
+                            powershell -Command "(Get-Content remote\\src-tauri\\tauri.conf.json) -replace '\"version\": \"[0-9]+\\.[0-9]+\\.[0-9]+\"', '\"version\": \"%APP_VERSION%\"' | Set-Content remote\\src-tauri\\tauri.conf.json"
+                            powershell -Command "(Get-Content remote\\src-tauri\\Cargo.toml) -replace 'version = \"[0-9]+\\.[0-9]+\\.[0-9]+\"', 'version = \"%APP_VERSION%\"' | Set-Content remote\\src-tauri\\Cargo.toml"
+                        """
+                        
+                        echo '=== Accepting Android SDK Licenses ==='
+                        bat '''
+                            @echo off
+                            setlocal enabledelayedexpansion
+                            
+                            REM Erstelle licenses Ordner falls nicht vorhanden
+                            if not exist "%ANDROID_HOME%\\licenses" mkdir "%ANDROID_HOME%\\licenses"
+                            
+                            REM Akzeptiere Lizenzen
+                            if exist "%ANDROID_HOME%\\cmdline-tools\\latest\\bin\\sdkmanager.bat" (
+                                (echo y & echo y & echo y & echo y & echo y & echo y) | "%ANDROID_HOME%\\cmdline-tools\\latest\\bin\\sdkmanager.bat" --licenses
+                            ) else (
+                                echo 24333f8a63b6825ea9c5514f83c2829b004d1fee > "%ANDROID_HOME%\\licenses\\android-sdk-license"
+                                echo 8933bad161af4178b1185d1a37fbf41ea5269c55 > "%ANDROID_HOME%\\licenses\\android-ndk-license"
+                            )
+                        '''
+                        
+                        echo '=== Installing Rust Android Targets ==='
+                        bat '''
+                            @echo off
+                            set "PATH=%USERPROFILE%\\.cargo\\bin;%PATH%"
+                            rustup target add aarch64-linux-android
+                            rustup target add armv7-linux-androideabi
+                            rustup target add x86_64-linux-android
+                            rustup target add i686-linux-android
+                        '''
+                        
+                        echo '=== Installing Remote Dependencies ==='
+                        dir('remote') {
+                            bat '''
+                                @echo off
+                                call npm install
+                            '''
+                        }
+                        
+                        echo '=== Building Android APK ==='
+                        dir('remote') {
+                            withCredentials([
+                                file(credentialsId: 'release.keystore', variable: 'KEYSTORE_FILE'),
+                                string(credentialsId: 'keystore-password', variable: 'KEYSTORE_PASSWORD'),
+                                string(credentialsId: 'key-alias', variable: 'KEY_ALIAS'),
+                                string(credentialsId: 'key-password', variable: 'KEY_PASSWORD')
+                            ]) {
+                                bat '''
+                                    @echo off
+                                    set "PATH=%USERPROFILE%\\.cargo\\bin;%PATH%"
+                                    
+                                    REM Kopiere Keystore in Android-Projekt
+                                    copy "%KEYSTORE_FILE%" "src-tauri\\gen\\android\\app\\release.keystore"
+                                    
+                                    REM Erstelle keystore.properties für Gradle
+                                    echo storeFile=release.keystore > "src-tauri\\gen\\android\\keystore.properties"
+                                    echo storePassword=%KEYSTORE_PASSWORD% >> "src-tauri\\gen\\android\\keystore.properties"
+                                    echo keyAlias=%KEY_ALIAS% >> "src-tauri\\gen\\android\\keystore.properties"
+                                    echo keyPassword=%KEY_PASSWORD% >> "src-tauri\\gen\\android\\keystore.properties"
+                                    
+                                    REM Baue Android APK
+                                    call npx tauri android build --apk
+                                '''
+                            }
+                        }
+                        
+                        echo '=== Collecting Android Artifacts ==='
+                        bat '''
+                            @echo off
+                            mkdir dist\\android 2>nul
+                            
+                            REM Suche nach APKs in verschiedenen möglichen Pfaden
+                            for /r remote\\src-tauri\\gen\\android %%f in (*.apk) do (
+                                echo Gefunden: %%f
+                                copy "%%f" dist\\android\\
+                            )
+                        '''
+                        
+                        archiveArtifacts artifacts: 'dist/android/*.apk', fingerprint: true
+                        stash includes: 'dist/android/*.apk', name: 'android-apk'
+                    }
+                    
+                    post {
+                        always {
+                            // Keystore-Dateien entfernen
+                            bat '''
+                                @echo off
+                                del /q remote\\src-tauri\\gen\\android\\app\\release.keystore 2>nul
+                                del /q remote\\src-tauri\\gen\\android\\keystore.properties 2>nul
+                            '''
+                            cleanWs()
+                        }
+                    }
+                }
+                
+                // --------------------------------------------------------
                 // Linux Server & App (.deb Pakete)
                 // HINWEIS: Erfordert einen Linux-Agent mit Label 'linux'
                 // --------------------------------------------------------
@@ -304,6 +420,7 @@ pipeline {
                     try { unstash 'windows-app' } catch (e) { echo "Windows App: ${e}" }
                     try { unstash 'windows-server' } catch (e) { echo "Windows Server: ${e}" }
                     try { unstash 'linux-packages' } catch (e) { echo "Linux: ${e}" }
+                    try { unstash 'android-apk' } catch (e) { echo "Android: ${e}" }
                 }
                 
                 echo '=== All Artifacts ==='

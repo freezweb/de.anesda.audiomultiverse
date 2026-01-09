@@ -35,12 +35,14 @@ Ein virtuelles, softwarebasiertes Mischpult mit nativer DANTE-Unterstützung, MI
 - [x] Jenkinsfile konfigurieren
 - [x] Windows Agent Dokumentation
 - [x] Linux Agent Dokumentation
-- [ ] Android Build-Umgebung (SDK, NDK) - dokumentiert
+- [x] Android Build-Umgebung (SDK, NDK) - dokumentiert
 - [ ] Raspberry Pi ARM64 Cross-Compile - dokumentiert
 - [x] Inno Setup Script (deploy/windows/installer.iss)
 - [x] cargo-deb für Linux .deb Pakete
-- [ ] APK Signing konfigurieren
+- [x] APK Signing konfigurieren
 - [x] Artifact-Archivierung im Jenkinsfile
+- [x] Remote-App auf Tauri 2.x aktualisiert (Android-Support)
+- [x] Android-Stage im Jenkinsfile
 - [ ] Optional: macOS Agent für .dmg
 
 #### 1.2 Audio-Engine Kern
