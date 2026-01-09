@@ -188,7 +188,10 @@ pipeline {
                                 patchelf \
                                 libssl-dev \
                                 libasound2-dev \
-                                libjack-jackd2-dev
+                                libjack-jackd2-dev \
+                                libsoup2.4-dev \
+                                libgtk-3-dev \
+                                libjavascriptcoregtk-4.1-dev
                         '''
                         
                         echo '=== Building Server ==='
