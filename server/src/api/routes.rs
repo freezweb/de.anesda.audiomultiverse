@@ -16,6 +16,7 @@ use tokio::sync::RwLock;
 
 use crate::config::ApiConfig;
 use crate::mixer::{Mixer, SceneManager, SceneMetadata, MasterSection, MasterState};
+use crate::network_audio::{NetworkDevice, SapDiscovery, PtpClock};
 use audiomultiverse_protocol::{ApiResponse, ChannelState, MixerState, ServerInfo};
 
 use super::websocket::handle_websocket;
@@ -27,6 +28,10 @@ pub struct AppState {
     pub config: ApiConfig,
     pub scene_manager: Arc<RwLock<SceneManager>>,
     pub master: Arc<MasterSection>,
+    /// SAP Discovery for AES67 stream discovery (thread-safe)
+    pub sap_discovery: Option<Arc<SapDiscovery>>,
+    /// PTP Clock for AES67 synchronization (thread-safe)
+    pub ptp_clock: Option<Arc<PtpClock>>,
 }
 
 /// API Server starten
@@ -35,12 +40,16 @@ pub async fn start_api_server(
     mixer: Arc<Mixer>,
     scene_manager: Arc<RwLock<SceneManager>>,
     master: Arc<MasterSection>,
+    sap_discovery: Option<Arc<SapDiscovery>>,
+    ptp_clock: Option<Arc<PtpClock>>,
 ) -> anyhow::Result<()> {
     let state = AppState {
         mixer,
         config: config.clone(),
         scene_manager,
         master,
+        sap_discovery,
+        ptp_clock,
     };
 
     // CORS konfigurieren
@@ -87,6 +96,13 @@ pub async fn start_api_server(
         .route("/api/master/mono", post(set_master_mono))
         .route("/api/master/talkback", post(set_master_talkback))
         .route("/api/master/oscillator", post(set_master_oscillator))
+        
+        // AES67 Network Audio
+        .route("/api/aes67/status", get(get_aes67_status))
+        .route("/api/aes67/streams", get(get_aes67_streams))
+        .route("/api/aes67/streams/:id/subscribe", post(subscribe_aes67_stream))
+        .route("/api/aes67/streams/:id/unsubscribe", post(unsubscribe_aes67_stream))
+        .route("/api/aes67/refresh", post(refresh_aes67_discovery))
         
         // Health Check
         .route("/health", get(health_check))
@@ -463,4 +479,152 @@ async fn set_master_oscillator(
     }
     let new_state = state.master.set_oscillator(req.enabled);
     Json(ApiResponse::ok(new_state))
+}
+
+// === AES67 Network Audio API ===
+
+/// AES67 Status Response
+#[derive(serde::Serialize)]
+pub struct Aes67Status {
+    pub enabled: bool,
+    pub ptp_synchronized: bool,
+    pub ptp_offset_ns: i64,
+    pub our_stream: Option<Aes67StreamInfo>,
+    pub subscribed_streams: Vec<String>,
+}
+
+/// AES67 Stream Info für API
+#[derive(serde::Serialize, Clone)]
+pub struct Aes67StreamInfo {
+    pub id: String,
+    pub name: String,
+    pub channels: u8,
+    pub sample_rate: u32,
+    pub multicast_addr: String,
+    pub port: u16,
+    pub direction: String,
+    pub origin: String,
+}
+
+/// Get AES67 status
+async fn get_aes67_status(
+    State(state): State<AppState>,
+) -> Json<ApiResponse<Aes67Status>> {
+    let (ptp_sync, offset) = if let Some(ref ptp) = state.ptp_clock {
+        (ptp.is_synchronized(), ptp.offset_ns())
+    } else {
+        (false, 0)
+    };
+    
+    let enabled = state.sap_discovery.is_some();
+    
+    let status = Aes67Status {
+        enabled,
+        ptp_synchronized: ptp_sync,
+        ptp_offset_ns: offset,
+        our_stream: None, // Our output stream info - would need separate tracking
+        subscribed_streams: vec![], // TODO: Track subscribed streams via channel
+    };
+    
+    Json(ApiResponse::ok(status))
+}
+
+/// Get discovered AES67 streams
+async fn get_aes67_streams(
+    State(state): State<AppState>,
+) -> Json<ApiResponse<Vec<Aes67StreamInfo>>> {
+    let streams = if let Some(ref sap) = state.sap_discovery {
+        sap.streams()
+            .into_iter()
+            .map(|s| Aes67StreamInfo {
+                id: s.session_id.clone(),
+                name: s.name.clone(),
+                channels: s.channels,
+                sample_rate: s.sample_rate,
+                multicast_addr: s.multicast_addr.to_string(),
+                port: s.port,
+                direction: format!("{:?}", s.direction),
+                origin: s.origin.clone(),
+            })
+            .collect()
+    } else {
+        vec![]
+    };
+    
+    Json(ApiResponse::ok(streams))
+}
+
+/// Subscribe to an AES67 stream (receive audio from it)
+/// NOTE: Currently returns info only - actual subscription happens via WebSocket
+#[derive(serde::Deserialize)]
+pub struct SubscribeRequest {
+    /// Which local input channels to map this stream to (starting channel)
+    pub start_channel: Option<u32>,
+}
+
+async fn subscribe_aes67_stream(
+    State(state): State<AppState>,
+    Path(stream_id): Path<String>,
+    Json(_req): Json<SubscribeRequest>,
+) -> Json<ApiResponse<String>> {
+    // Find the stream info
+    let stream = if let Some(ref sap) = state.sap_discovery {
+        sap.streams()
+            .into_iter()
+            .find(|s| s.session_id == stream_id)
+    } else {
+        return Json(ApiResponse::err("AES67 not enabled".to_string()));
+    };
+    
+    match stream {
+        Some(s) => {
+            // For now, return stream info for manual subscription
+            // Full subscription would require AudioEngine access via channel/message
+            let msg = format!(
+                "Stream gefunden: '{}' auf {}:{} ({} Kanäle). \
+                 Verwende WebSocket /subscribe_stream für aktive Subscription.",
+                s.name, s.multicast_addr, s.port, s.channels
+            );
+            tracing::info!("🔊 AES67 Subscribe Request: {} - {}", stream_id, s.name);
+            Json(ApiResponse::ok(msg))
+        }
+        None => Json(ApiResponse::err(format!("Stream '{}' not found", stream_id))),
+    }
+}
+
+/// Unsubscribe from an AES67 stream
+async fn unsubscribe_aes67_stream(
+    State(_state): State<AppState>,
+    Path(_stream_id): Path<String>,
+) -> Json<ApiResponse<String>> {
+    // Actual unsubscribe would go through WebSocket/channel to AudioEngine
+    let msg = "Unsubscribe erfolgt via WebSocket".to_string();
+    tracing::info!("🔇 AES67 Unsubscribe request");
+    Json(ApiResponse::ok(msg))
+}
+
+/// Refresh AES67 discovery (re-scan network)
+async fn refresh_aes67_discovery(
+    State(state): State<AppState>,
+) -> Json<ApiResponse<Vec<Aes67StreamInfo>>> {
+    // SAP discovery runs continuously, return current streams
+    let streams = if let Some(ref sap) = state.sap_discovery {
+        sap.streams()
+            .into_iter()
+            .map(|s| Aes67StreamInfo {
+                id: s.session_id.clone(),
+                name: s.name.clone(),
+                channels: s.channels,
+                sample_rate: s.sample_rate,
+                multicast_addr: s.multicast_addr.to_string(),
+                port: s.port,
+                direction: format!("{:?}", s.direction),
+                origin: s.origin.clone(),
+            })
+            .collect()
+    } else {
+        vec![]
+    };
+    
+    Json(ApiResponse::ok(streams))
 }

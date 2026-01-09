@@ -10,7 +10,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Host, Stream, StreamConfig, SampleFormat};
 
 use crate::mixer::{Mixer, MasterSection};
-use crate::network_audio::{Aes67Backend, Aes67Config, AudioNetworkBackend, NetworkDevice};
+use crate::network_audio::{Aes67Backend, Aes67Config, AudioNetworkBackend, NetworkDevice, SapDiscovery, PtpClock};
 
 /// Audio Device Info
 #[derive(Debug, Clone)]
@@ -107,6 +107,16 @@ impl AudioEngine {
     /// Get AES67 backend mutable reference
     pub fn aes67_backend_mut(&mut self) -> Option<&mut Aes67Backend> {
         self.aes67_backend.as_mut()
+    }
+
+    /// Get SAP discovery reference (thread-safe, can be shared with API)
+    pub fn sap_discovery(&self) -> Option<Arc<SapDiscovery>> {
+        self.aes67_backend.as_ref().map(|b| b.sap_discovery())
+    }
+
+    /// Get PTP clock reference (thread-safe, can be shared with API)
+    pub fn ptp_clock(&self) -> Option<Arc<PtpClock>> {
+        self.aes67_backend.as_ref().map(|b| b.ptp_clock())
     }
 
     /// Discover AES67 devices

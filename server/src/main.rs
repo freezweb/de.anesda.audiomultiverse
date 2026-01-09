@@ -119,6 +119,12 @@ async fn main() -> Result<()> {
         }
     }
 
+    // AES67-Referenzen für API Server extrahieren
+    let (sap_discovery, ptp_clock) = (
+        audio_engine.sap_discovery(),
+        audio_engine.ptp_clock(),
+    );
+
     // MIDI initialisieren
     let mut midi_controller = MidiController::new();
     midi_controller.set_mixer(mixer.clone());
@@ -159,6 +165,8 @@ async fn main() -> Result<()> {
         mixer.clone(),
         scene_manager.clone(),
         master.clone(),
+        sap_discovery,
+        ptp_clock,
     ).await?;
 
     Ok(())
