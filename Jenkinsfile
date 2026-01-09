@@ -156,12 +156,17 @@ pipeline {
                 stage('Linux Packages') {
                     agent { label 'linux' }
                     
-                    options {
-                        skipDefaultCheckout()
-                    }
-                    
                     steps {
-                        unstash 'source'
+                        // Manueller Git-Clone da Jenkins git.exe statt git verwendet
+                        sh '''
+                            cd "$WORKSPACE"
+                            if [ -d ".git" ]; then
+                                git fetch --all
+                                git reset --hard origin/main
+                            else
+                                git clone https://github.com/freezweb/de.anesda.audiomultiverse.git .
+                            fi
+                        '''
                         
                         echo '=== Installing Dependencies ==='
                         sh '''
