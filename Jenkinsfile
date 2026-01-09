@@ -182,7 +182,7 @@ pipeline {
                             apt-get update
                             apt-get install -y \
                                 build-essential \
-                                libwebkit2gtk-4.1-dev \
+                                libwebkit2gtk-4.0-dev \
                                 libappindicator3-dev \
                                 librsvg2-dev \
                                 patchelf \
@@ -191,7 +191,7 @@ pipeline {
                                 libjack-jackd2-dev \
                                 libsoup2.4-dev \
                                 libgtk-3-dev \
-                                libjavascriptcoregtk-4.1-dev
+                                libjavascriptcoregtk-4.0-dev
                         '''
                         
                         echo '=== Building Server ==='
