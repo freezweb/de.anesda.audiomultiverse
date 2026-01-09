@@ -151,3 +151,41 @@ pub struct ClientInfo {
     /// Unterstützte Features
     pub features: Vec<String>,
 }
+
+// === AES67 Network Audio Types ===
+
+/// AES67 Status
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Aes67Status {
+    /// AES67 aktiviert
+    pub enabled: bool,
+    /// PTP synchronisiert
+    pub ptp_synchronized: bool,
+    /// PTP Offset in Nanosekunden
+    pub ptp_offset_ns: i64,
+    /// Unser Output-Stream (falls aktiv)
+    pub our_stream: Option<Aes67StreamInfo>,
+    /// Aktuell empfangene Streams
+    pub subscribed_streams: Vec<String>,
+}
+
+/// AES67 Stream Information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Aes67StreamInfo {
+    /// Session ID (eindeutig)
+    pub id: String,
+    /// Stream Name
+    pub name: String,
+    /// Anzahl Kanäle
+    pub channels: u8,
+    /// Sample Rate
+    pub sample_rate: u32,
+    /// Multicast-Adresse
+    pub multicast_addr: String,
+    /// Port
+    pub port: u16,
+    /// Richtung (Send, Receive, SendReceive)
+    pub direction: String,
+    /// Origin (Host der den Stream sendet)
+    pub origin: String,
+}

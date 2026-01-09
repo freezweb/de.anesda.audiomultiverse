@@ -10,6 +10,7 @@ use tracing::{info, warn, error};
 
 use audiomultiverse_protocol::{
     ClientMessage, ServerMessage, ClientInfo, ServerInfo, MeterData,
+    Aes67Status, Aes67StreamInfo,
 };
 use super::routes::AppState;
 
@@ -176,7 +177,7 @@ async fn handle_client_message(
                 .map(ServerMessage::ChannelUpdated)
         }
         
-        ClientMessage::SetGain { channel, value } => {
+        ClientMessage::SetGain { channel, value: _ } => {
             // TODO: set_gain implementieren
             state.mixer.get_channel(channel)
                 .map(ServerMessage::ChannelUpdated)
@@ -199,9 +200,120 @@ async fn handle_client_message(
             }
         }
         
-        ClientMessage::SubscribeMeters { enabled, interval_ms } => {
+        ClientMessage::SubscribeMeters { enabled: _, interval_ms: _ } => {
             // TODO: Meter-Subscription pro Client verwalten
             None
+        }
+        
+        // === AES67 Network Audio ===
+        
+        ClientMessage::GetAes67Status => {
+            let (ptp_sync, offset) = if let Some(ref ptp) = state.ptp_clock {
+                (ptp.is_synchronized(), ptp.offset_ns())
+            } else {
+                (false, 0)
+            };
+            
+            Some(ServerMessage::Aes67Status(Aes67Status {
+                enabled: state.sap_discovery.is_some(),
+                ptp_synchronized: ptp_sync,
+                ptp_offset_ns: offset,
+                our_stream: None,
+                subscribed_streams: vec![],
+            }))
+        }
+        
+        ClientMessage::GetAes67Streams => {
+            let streams = if let Some(ref sap) = state.sap_discovery {
+                sap.streams()
+                    .into_iter()
+                    .map(|s| Aes67StreamInfo {
+                        id: s.session_id.clone(),
+                        name: s.name.clone(),
+                        channels: s.channels,
+                        sample_rate: s.sample_rate,
+                        multicast_addr: s.multicast_addr.to_string(),
+                        port: s.port,
+                        direction: format!("{:?}", s.direction),
+                        origin: s.origin.clone(),
+                    })
+                    .collect()
+            } else {
+                vec![]
+            };
+            
+            Some(ServerMessage::Aes67Streams(streams))
+        }
+        
+        ClientMessage::SubscribeAes67Stream { stream_id, start_channel } => {
+            let audio_cmd = match &state.audio_cmd {
+                Some(cmd) => cmd.clone(),
+                None => return Some(ServerMessage::Error {
+                    code: "NO_ENGINE".to_string(),
+                    message: "AudioEngine not available".to_string(),
+                }),
+            };
+            
+            // Subscribe async
+            match audio_cmd.subscribe_stream(stream_id.clone(), start_channel).await {
+                Ok(result) => {
+                    info!("🔊 WS: Subscribed to '{}' ({} ch) -> Kanal {}", 
+                          result.stream_name, result.channels, result.start_channel);
+                    Some(ServerMessage::Aes67Subscribed {
+                        stream_id: result.stream_id,
+                        stream_name: result.stream_name,
+                        channels: result.channels,
+                        start_channel: result.start_channel,
+                    })
+                }
+                Err(e) => Some(ServerMessage::Error {
+                    code: "SUBSCRIBE_FAILED".to_string(),
+                    message: e,
+                }),
+            }
+        }
+        
+        ClientMessage::UnsubscribeAes67Stream { stream_id } => {
+            let audio_cmd = match &state.audio_cmd {
+                Some(cmd) => cmd.clone(),
+                None => return Some(ServerMessage::Error {
+                    code: "NO_ENGINE".to_string(),
+                    message: "AudioEngine not available".to_string(),
+                }),
+            };
+            
+            match audio_cmd.unsubscribe_stream(stream_id.clone()).await {
+                Ok(_) => {
+                    info!("🔇 WS: Unsubscribed from '{}'", stream_id);
+                    Some(ServerMessage::Aes67Unsubscribed { stream_id })
+                }
+                Err(e) => Some(ServerMessage::Error {
+                    code: "UNSUBSCRIBE_FAILED".to_string(),
+                    message: e,
+                }),
+            }
+        }
+        
+        ClientMessage::RefreshAes67 => {
+            let streams = if let Some(ref sap) = state.sap_discovery {
+                sap.streams()
+                    .into_iter()
+                    .map(|s| Aes67StreamInfo {
+                        id: s.session_id.clone(),
+                        name: s.name.clone(),
+                        channels: s.channels,
+                        sample_rate: s.sample_rate,
+                        multicast_addr: s.multicast_addr.to_string(),
+                        port: s.port,
+                        direction: format!("{:?}", s.direction),
+                        origin: s.origin.clone(),
+                    })
+                    .collect()
+            } else {
+                vec![]
+            };
+            
+            Some(ServerMessage::Aes67Streams(streams))
         }
         
         _ => {

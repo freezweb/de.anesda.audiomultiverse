@@ -124,6 +124,13 @@ async fn main() -> Result<()> {
         audio_engine.sap_discovery(),
         audio_engine.ptp_clock(),
     );
+    
+    // Command-Sender für Echtzeit-Steuerung
+    // Hinweis: AudioEngine ist nicht Send wegen cpal::Stream, daher können wir
+    // keine Commands asynchron verarbeiten. Für echte Echtzeit-Subscription
+    // müsste das Audio-System komplett überarbeitet werden.
+    // Aktuell: SAP Discovery und PTP Status funktionieren, Subscribe ist TODO.
+    let audio_cmd: Option<crate::audio::AudioCommandSender> = None;
 
     // MIDI initialisieren
     let mut midi_controller = MidiController::new();
@@ -167,6 +174,7 @@ async fn main() -> Result<()> {
         master.clone(),
         sap_discovery,
         ptp_clock,
+        audio_cmd,
     ).await?;
 
     Ok(())

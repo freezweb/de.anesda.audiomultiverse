@@ -17,6 +17,7 @@ use tokio::sync::RwLock;
 use crate::config::ApiConfig;
 use crate::mixer::{Mixer, SceneManager, SceneMetadata, MasterSection, MasterState};
 use crate::network_audio::{NetworkDevice, SapDiscovery, PtpClock};
+use crate::audio::AudioCommandSender;
 use audiomultiverse_protocol::{ApiResponse, ChannelState, MixerState, ServerInfo};
 
 use super::websocket::handle_websocket;
@@ -32,6 +33,8 @@ pub struct AppState {
     pub sap_discovery: Option<Arc<SapDiscovery>>,
     /// PTP Clock for AES67 synchronization (thread-safe)
     pub ptp_clock: Option<Arc<PtpClock>>,
+    /// Command sender for AudioEngine control (thread-safe)
+    pub audio_cmd: Option<AudioCommandSender>,
 }
 
 /// API Server starten
@@ -42,6 +45,7 @@ pub async fn start_api_server(
     master: Arc<MasterSection>,
     sap_discovery: Option<Arc<SapDiscovery>>,
     ptp_clock: Option<Arc<PtpClock>>,
+    audio_cmd: Option<AudioCommandSender>,
 ) -> anyhow::Result<()> {
     let state = AppState {
         mixer,
@@ -50,6 +54,7 @@ pub async fn start_api_server(
         master,
         sap_discovery,
         ptp_clock,
+        audio_cmd,
     };
 
     // CORS konfigurieren
@@ -555,7 +560,6 @@ async fn get_aes67_streams(
 }
 
 /// Subscribe to an AES67 stream (receive audio from it)
-/// NOTE: Currently returns info only - actual subscription happens via WebSocket
 #[derive(serde::Deserialize)]
 pub struct SubscribeRequest {
     /// Which local input channels to map this stream to (starting channel)
@@ -565,42 +569,48 @@ pub struct SubscribeRequest {
 async fn subscribe_aes67_stream(
     State(state): State<AppState>,
     Path(stream_id): Path<String>,
-    Json(_req): Json<SubscribeRequest>,
+    Json(req): Json<SubscribeRequest>,
 ) -> Json<ApiResponse<String>> {
-    // Find the stream info
-    let stream = if let Some(ref sap) = state.sap_discovery {
-        sap.streams()
-            .into_iter()
-            .find(|s| s.session_id == stream_id)
-    } else {
-        return Json(ApiResponse::err("AES67 not enabled".to_string()));
+    // Check if we have a command sender
+    let audio_cmd = match &state.audio_cmd {
+        Some(cmd) => cmd.clone(),
+        None => return Json(ApiResponse::err("AudioEngine not available".to_string())),
     };
     
-    match stream {
-        Some(s) => {
-            // For now, return stream info for manual subscription
-            // Full subscription would require AudioEngine access via channel/message
+    // Subscribe via command channel
+    match audio_cmd.subscribe_stream(stream_id.clone(), req.start_channel).await {
+        Ok(result) => {
             let msg = format!(
-                "Stream gefunden: '{}' auf {}:{} ({} Kanäle). \
-                 Verwende WebSocket /subscribe_stream für aktive Subscription.",
-                s.name, s.multicast_addr, s.port, s.channels
+                "✅ Subscribed to '{}' ({} channels) -> Kanal {}",
+                result.stream_name, result.channels, result.start_channel
             );
-            tracing::info!("🔊 AES67 Subscribe Request: {} - {}", stream_id, s.name);
+            tracing::info!("🔊 {}", msg);
             Json(ApiResponse::ok(msg))
         }
-        None => Json(ApiResponse::err(format!("Stream '{}' not found", stream_id))),
+        Err(e) => Json(ApiResponse::err(e)),
     }
 }
 
 /// Unsubscribe from an AES67 stream
 async fn unsubscribe_aes67_stream(
-    State(_state): State<AppState>,
-    Path(_stream_id): Path<String>,
+    State(state): State<AppState>,
+    Path(stream_id): Path<String>,
 ) -> Json<ApiResponse<String>> {
-    // Actual unsubscribe would go through WebSocket/channel to AudioEngine
-    let msg = "Unsubscribe erfolgt via WebSocket".to_string();
-    tracing::info!("🔇 AES67 Unsubscribe request");
-    Json(ApiResponse::ok(msg))
+    // Check if we have a command sender
+    let audio_cmd = match &state.audio_cmd {
+        Some(cmd) => cmd.clone(),
+        None => return Json(ApiResponse::err("AudioEngine not available".to_string())),
+    };
+    
+    // Unsubscribe via command channel
+    match audio_cmd.unsubscribe_stream(stream_id.clone()).await {
+        Ok(_) => {
+            let msg = format!("✅ Unsubscribed from stream '{}'", stream_id);
+            tracing::info!("🔇 {}", msg);
+            Json(ApiResponse::ok(msg))
+        }
+        Err(e) => Json(ApiResponse::err(e)),
+    }
 }
 
 /// Refresh AES67 discovery (re-scan network)
