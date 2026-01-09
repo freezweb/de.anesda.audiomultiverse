@@ -199,7 +199,7 @@ impl ClientMidiController {
                 }
             },
             (),
-        )?;
+        ).map_err(|e| anyhow::anyhow!("MIDI connect failed: {:?}", e))?;
         
         self.connections.push(conn);
         info!("MIDI Device verbunden: {}", device_name);
