@@ -3,6 +3,7 @@
 //! REST API Endpoints für Hausautomatisierung und einfache Abfragen
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use axum::{
     routing::{get, patch, post, delete},
     Router,
@@ -12,7 +13,8 @@ use axum::{
 };
 use tower_http::cors::{CorsLayer, Any};
 use tracing::info;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, broadcast};
+use audiomultiverse_protocol::ServerMessage;
 
 use crate::config::ApiConfig;
 use crate::mixer::{Mixer, SceneManager, SceneMetadata, MasterSection, MasterState};
@@ -35,6 +37,11 @@ pub struct AppState {
     pub ptp_clock: Option<Arc<PtpClock>>,
     /// Command sender for AudioEngine control (thread-safe)
     pub audio_cmd: Option<AudioCommandSender>,
+    /// Broadcast-Channel für Multi-Client-Synchronisation
+    /// Alle Änderungen werden an alle verbundenen Clients gesendet
+    pub broadcast_tx: broadcast::Sender<ServerMessage>,
+    /// Anzahl der verbundenen Clients (atomic für thread-safety)
+    pub client_count: Arc<AtomicUsize>,
 }
 
 /// API Server starten
@@ -47,6 +54,9 @@ pub async fn start_api_server(
     ptp_clock: Option<Arc<PtpClock>>,
     audio_cmd: Option<AudioCommandSender>,
 ) -> anyhow::Result<()> {
+    // Broadcast-Channel für Multi-Client-Sync (Kapazität für bis zu 256 gepufferte Nachrichten)
+    let (broadcast_tx, _) = broadcast::channel::<ServerMessage>(256);
+    
     let state = AppState {
         mixer,
         config: config.clone(),
@@ -55,6 +65,8 @@ pub async fn start_api_server(
         sap_discovery,
         ptp_clock,
         audio_cmd,
+        broadcast_tx,
+        client_count: Arc::new(AtomicUsize::new(0)),
     };
 
     // CORS konfigurieren
@@ -150,7 +162,7 @@ async fn get_server_info(State(state): State<AppState>) -> Json<ApiResponse<Serv
         input_count: state.mixer.input_count as u32,
         output_count: state.mixer.output_count as u32,
         sample_rate: 48000,
-        client_count: 0, // TODO: Clients zählen
+        client_count: state.client_count.load(Ordering::Relaxed) as u32,
         audio_backend: "aes67".to_string(),
     };
     

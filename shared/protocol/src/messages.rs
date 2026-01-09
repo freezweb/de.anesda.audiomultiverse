@@ -205,6 +205,12 @@ pub enum ServerMessage {
     /// Stream Subscription beendet
     #[serde(rename = "aes67_unsubscribed")]
     Aes67Unsubscribed { stream_id: String },
+    
+    // === Multi-Client Sync ===
+    
+    /// Client-Anzahl hat sich geändert (Broadcast an alle Clients)
+    #[serde(rename = "client_count_changed")]
+    ClientCountChanged { count: u32 },
 }
 
 /// REST API Response Wrapper
