@@ -54,7 +54,8 @@ impl ClientMidiFeedback {
             .find(|p| midi_out.port_name(p).map(|n| n == device_name).unwrap_or(false))
             .ok_or_else(|| anyhow::anyhow!("MIDI output device not found: {}", device_name))?;
         
-        let conn = midi_out.connect(&port, "audiomultiverse-feedback")?;
+        let conn = midi_out.connect(&port, "audiomultiverse-feedback")
+            .map_err(|e| anyhow::anyhow!("MIDI connect failed: {:?}", e))?;
         
         self.connections.lock().unwrap().insert(device_name.to_string(), conn);
         info!("MIDI Feedback verbunden: {}", device_name);
