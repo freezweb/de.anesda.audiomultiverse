@@ -64,7 +64,8 @@ impl MidiOutputManager {
             .ok_or_else(|| anyhow::anyhow!("MIDI Gerät nicht gefunden: {}", device_name))?
             .clone();
         
-        let connection = midi_out.connect(&port, "audiomultiverse-feedback")?;
+        let connection = midi_out.connect(&port, "audiomultiverse-feedback")
+            .map_err(|e| anyhow::anyhow!("MIDI Connect Fehler: {}", e))?;
         
         info!("🎹 MIDI Output verbunden: {}", device_name);
         
