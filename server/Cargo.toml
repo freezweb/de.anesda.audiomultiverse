@@ -24,6 +24,13 @@ toml = "0.8"
 cpal = "0.15"
 # jack = "0.11"  # Uncomment for JACK support on Linux
 
+# AES67/Network Audio (core - all platforms)
+socket2 = "0.5"                    # Low-level socket control for multicast
+bytes = "1.5"                      # Buffer handling for RTP
+byteorder = "1.5"                  # Network byte order for RTP packets
+rand = "0.8"                       # RTP SSRC generation
+parking_lot = "0.12"               # Fast mutexes for audio thread
+
 # MIDI
 midir = "0.9"
 
@@ -45,6 +52,11 @@ hostname = "0.4"
 
 # Shared protocol definitions
 audiomultiverse-protocol = { path = "../shared/protocol" }
+
+# AES67/PTP - Linux only (statime-linux requires Unix socket APIs)
+[target.'cfg(target_os = "linux")'.dependencies]
+statime = "0.4"                    # PTP (IEEE 1588) Clock Sync
+statime-linux = "0.4"              # PTP Linux implementation
 
 [dev-dependencies]
 tokio-test = "0.4"

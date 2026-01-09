@@ -23,6 +23,10 @@ pub struct AudioConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
     
+    /// AES67 Network Audio aktiviert
+    #[serde(default)]
+    pub aes67_enabled: Option<bool>,
+    
     /// Anzahl der Eingangskanäle (1-64)
     #[serde(default = "default_channels")]
     pub input_channels: usize,
@@ -109,6 +113,7 @@ impl Default for ServerConfig {
                 output_channels: 32,
                 sample_rate: 48000,
                 buffer_size: 256,
+                aes67_enabled: Some(true),
             },
             midi: MidiConfig {
                 enabled: true,

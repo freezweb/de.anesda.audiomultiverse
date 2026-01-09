@@ -93,6 +93,32 @@ async fn main() -> Result<()> {
         }
     }
 
+    // AES67 Network Audio initialisieren
+    if config.audio.aes67_enabled.unwrap_or(true) {
+        match audio_engine.init_aes67(None) {
+            Ok(_) => {
+                info!("🌐 AES67 Network Audio initialisiert");
+                
+                // Warte kurz und zeige entdeckte Geräte
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                match audio_engine.discover_aes67_devices() {
+                    Ok(devices) => {
+                        if devices.is_empty() {
+                            info!("   Keine AES67 Geräte im Netzwerk gefunden (noch)");
+                        } else {
+                            info!("   {} AES67 Gerät(e) gefunden:", devices.len());
+                            for device in &devices {
+                                info!("     - {} ({} channels)", device.name, device.channels);
+                            }
+                        }
+                    }
+                    Err(e) => info!("   Fehler bei AES67 Discovery: {}", e),
+                }
+            }
+            Err(e) => info!("AES67 konnte nicht initialisiert werden: {} (nur lokales Audio)", e),
+        }
+    }
+
     // MIDI initialisieren
     let mut midi_controller = MidiController::new();
     midi_controller.set_mixer(mixer.clone());

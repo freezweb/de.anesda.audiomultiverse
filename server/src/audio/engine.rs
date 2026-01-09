@@ -1,6 +1,6 @@
 //! Audio Engine
 //! 
-//! Hauptmodul für Audio-Verarbeitung mit cpal
+//! Hauptmodul für Audio-Verarbeitung mit cpal und AES67 Integration
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -10,6 +10,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Host, Stream, StreamConfig, SampleFormat};
 
 use crate::mixer::{Mixer, MasterSection};
+use crate::network_audio::{Aes67Backend, Aes67Config, AudioNetworkBackend, NetworkDevice};
 
 /// Audio Device Info
 #[derive(Debug, Clone)]
@@ -18,6 +19,15 @@ pub struct AudioDeviceInfo {
     pub is_input: bool,
     pub is_output: bool,
     pub is_default: bool,
+}
+
+/// Audio source type
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AudioSource {
+    /// Local soundcard (cpal)
+    Local,
+    /// AES67 network audio
+    Aes67,
 }
 
 /// Audio Engine
@@ -30,6 +40,10 @@ pub struct AudioEngine {
     output_stream: Option<Stream>,
     mixer: Option<Arc<Mixer>>,
     master: Option<Arc<MasterSection>>,
+    /// AES67 Backend for network audio
+    aes67_backend: Option<Aes67Backend>,
+    /// Current audio source
+    audio_source: AudioSource,
 }
 
 impl AudioEngine {
@@ -46,6 +60,8 @@ impl AudioEngine {
             output_stream: None,
             mixer: None,
             master: None,
+            aes67_backend: None,
+            audio_source: AudioSource::Local,
         }
     }
 
@@ -57,6 +73,78 @@ impl AudioEngine {
     /// Master-Sektion setzen
     pub fn set_master(&mut self, master: Arc<MasterSection>) {
         self.master = Some(master);
+    }
+
+    /// Initialize AES67 backend
+    pub fn init_aes67(&mut self, config: Option<Aes67Config>) -> Result<()> {
+        info!("🌐 Initializing AES67 backend...");
+        
+        let config = config.unwrap_or_default();
+        let mut backend = Aes67Backend::with_config(config);
+        backend.init()?;
+        
+        self.aes67_backend = Some(backend);
+        
+        Ok(())
+    }
+
+    /// Set audio source
+    pub fn set_audio_source(&mut self, source: AudioSource) {
+        self.audio_source = source;
+        info!("🔊 Audio source set to: {:?}", source);
+    }
+
+    /// Get current audio source
+    pub fn audio_source(&self) -> AudioSource {
+        self.audio_source
+    }
+
+    /// Get AES67 backend reference
+    pub fn aes67_backend(&self) -> Option<&Aes67Backend> {
+        self.aes67_backend.as_ref()
+    }
+
+    /// Get AES67 backend mutable reference
+    pub fn aes67_backend_mut(&mut self) -> Option<&mut Aes67Backend> {
+        self.aes67_backend.as_mut()
+    }
+
+    /// Discover AES67 devices
+    pub fn discover_aes67_devices(&self) -> Result<Vec<NetworkDevice>> {
+        if let Some(backend) = &self.aes67_backend {
+            backend.discover()
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    /// Connect to AES67 device
+    pub fn connect_aes67(&mut self, device: &NetworkDevice) -> Result<()> {
+        if let Some(backend) = &mut self.aes67_backend {
+            backend.connect(device)?;
+            self.audio_source = AudioSource::Aes67;
+            Ok(())
+        } else {
+            Err(anyhow!("AES67 backend not initialized"))
+        }
+    }
+
+    /// Disconnect from AES67 device
+    pub fn disconnect_aes67(&mut self) -> Result<()> {
+        if let Some(backend) = &mut self.aes67_backend {
+            backend.disconnect()?;
+            self.audio_source = AudioSource::Local;
+            Ok(())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Check if AES67 PTP is synchronized
+    pub fn is_aes67_synchronized(&self) -> bool {
+        self.aes67_backend.as_ref()
+            .map(|b| b.is_ptp_synchronized())
+            .unwrap_or(false)
     }
 
     /// Engine starten
