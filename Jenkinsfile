@@ -178,9 +178,9 @@ pipeline {
                             command -v rustc || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
                             . "$HOME/.cargo/env"
                             
-                            # System Dependencies für Tauri
-                            sudo apt-get update
-                            sudo apt-get install -y \
+                            # System Dependencies für Tauri (Agent läuft als root)
+                            apt-get update
+                            apt-get install -y \
                                 build-essential \
                                 libwebkit2gtk-4.1-dev \
                                 libappindicator3-dev \
