@@ -52,6 +52,7 @@ pipeline {
                         echo '=== Installing Dependencies ==='
                         bat '''
                             @echo off
+                            setlocal enabledelayedexpansion
                             
                             REM Rust und MinGW zum PATH hinzufügen
                             set PATH=%USERPROFILE%\.cargo\bin;C:\msys64\mingw64\bin;%PATH%
@@ -62,10 +63,14 @@ pipeline {
                                 exit /b 1
                             )
                             
-                            REM Rust prüfen  
-                            where rustc >nul 2>&1 || (
-                                echo Rust nicht gefunden! Bitte installiere Rust: https://rustup.rs
-                                exit /b 1
+                            REM Rust prüfen und ggf. installieren
+                            where rustc >nul 2>&1
+                            if errorlevel 1 (
+                                echo Rust nicht gefunden - installiere Rust...
+                                curl -sSf -o rustup-init.exe https://win.rustup.rs/x86_64
+                                rustup-init.exe -y --default-toolchain stable-x86_64-pc-windows-gnu
+                                del rustup-init.exe
+                                set PATH=%USERPROFILE%\.cargo\bin;%PATH%
                             )
                             
                             rustc --version
