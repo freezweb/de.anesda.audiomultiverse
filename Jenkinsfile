@@ -7,7 +7,10 @@ pipeline {
     
     environment {
         APP_NAME = 'AudioMultiverse'
-        APP_VERSION = '0.1.0'
+        // Version: Major.Minor aus Datei, Patch = BUILD_NUMBER
+        VERSION_MAJOR = '0'
+        VERSION_MINOR = '1'
+        APP_VERSION = "${VERSION_MAJOR}.${VERSION_MINOR}.${BUILD_NUMBER}"
         RUST_VERSION = '1.75.0'
         NODE_VERSION = '20'
     }
@@ -48,6 +51,28 @@ pipeline {
                     
                     steps {
                         unstash 'source'
+                        
+                        echo "=== Setting Version to ${APP_VERSION} ==="
+                        bat """
+                            @echo off
+                            setlocal enabledelayedexpansion
+                            
+                            REM Version in package.json aktualisieren
+                            cd app
+                            call npm version %APP_VERSION% --no-git-tag-version --allow-same-version
+                            cd ..
+                            
+                            REM Version in tauri.conf.json aktualisieren
+                            powershell -Command "(Get-Content app\\src-tauri\\tauri.conf.json) -replace '\"version\": \"[0-9]+\\.[0-9]+\\.[0-9]+\"', '\"version\": \"%APP_VERSION%\"' | Set-Content app\\src-tauri\\tauri.conf.json"
+                            
+                            REM Version in Cargo.toml aktualisieren (app)
+                            powershell -Command "(Get-Content app\\src-tauri\\Cargo.toml) -replace 'version = \"[0-9]+\\.[0-9]+\\.[0-9]+\"', 'version = \"%APP_VERSION%\"' | Set-Content app\\src-tauri\\Cargo.toml"
+                            
+                            REM Version in Cargo.toml aktualisieren (server)
+                            powershell -Command "(Get-Content server\\Cargo.toml) -replace 'version = \"[0-9]+\\.[0-9]+\\.[0-9]+\"', 'version = \"%APP_VERSION%\"' | Set-Content server\\Cargo.toml"
+                            
+                            echo Version gesetzt: %APP_VERSION%
+                        """
                         
                         echo '=== Installing Dependencies ==='
                         bat '''
@@ -120,6 +145,12 @@ pipeline {
                     steps {
                         unstash 'source'
                         
+                        echo "=== Setting Version to ${APP_VERSION} ==="
+                        bat """
+                            @echo off
+                            powershell -Command "(Get-Content server\\Cargo.toml) -replace 'version = \"[0-9]+\\.[0-9]+\\.[0-9]+\"', 'version = \"%APP_VERSION%\"' | Set-Content server\\Cargo.toml"
+                        """
+                        
                         echo '=== Building Windows Server ==='
                         dir('server') {
                             bat '''
@@ -172,7 +203,26 @@ pipeline {
                             fi
                         '''
                         
-                        echo '=== Installing Dependencies ==='
+                        echo "=== Setting Version to ${APP_VERSION} ==="
+                        sh """
+                            cd "\$WORKSPACE"
+                            
+                            # Version in package.json aktualisieren
+                            cd app
+                            npm version ${APP_VERSION} --no-git-tag-version --allow-same-version || true
+                            cd ..
+                            
+                            # Version in tauri.conf.json aktualisieren
+                            sed -i 's/"version": "[0-9]*\\.[0-9]*\\.[0-9]*"/"version": "${APP_VERSION}"/' app/src-tauri/tauri.conf.json
+                            
+                            # Version in Cargo.toml aktualisieren
+                            sed -i 's/^version = "[0-9]*\\.[0-9]*\\.[0-9]*"/version = "${APP_VERSION}"/' app/src-tauri/Cargo.toml
+                            sed -i 's/^version = "[0-9]*\\.[0-9]*\\.[0-9]*"/version = "${APP_VERSION}"/' server/Cargo.toml
+                            
+                            echo "Version gesetzt: ${APP_VERSION}"
+                        """
+                        
+                        echo '=== Installing Linux Dependencies ==='
                         sh '''
                             # Rust
                             command -v rustc || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y

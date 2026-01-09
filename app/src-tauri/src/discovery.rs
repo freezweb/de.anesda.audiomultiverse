@@ -99,7 +99,7 @@ impl DiscoveryClient {
                         _ => {}
                     }
                 }
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                Err(flume::RecvTimeoutError::Timeout) => {
                     // Weiter warten
                 }
                 Err(e) => {
