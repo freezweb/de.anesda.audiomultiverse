@@ -9,9 +9,17 @@ export interface ConnectionState {
 	reconnectAttempts: number;
 }
 
+// Server-URL aus localStorage laden (falls vorhanden)
+function getStoredServerUrl(): string {
+	if (typeof localStorage !== 'undefined') {
+		return localStorage.getItem('audiomultiverse_server_url') || 'ws://localhost:8080/ws';
+	}
+	return 'ws://localhost:8080/ws';
+}
+
 const initialState: ConnectionState = {
 	status: 'disconnected',
-	serverUrl: 'ws://localhost:3000/ws',
+	serverUrl: getStoredServerUrl(),
 	lastError: null,
 	reconnectAttempts: 0
 };
@@ -24,6 +32,10 @@ export const connectionStatus = derived(connectionState, ($state) => $state.stat
 
 // Aktionen
 export function setConnecting(url: string) {
+	// URL speichern für nächstes Mal
+	if (typeof localStorage !== 'undefined') {
+		localStorage.setItem('audiomultiverse_server_url', url);
+	}
 	connectionState.update(state => ({
 		...state,
 		status: 'connecting',

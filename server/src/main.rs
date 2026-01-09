@@ -15,6 +15,7 @@ mod network_audio;
 mod api;
 mod config;
 mod mixer;
+mod discovery;
 
 use std::sync::Arc;
 use anyhow::Result;
@@ -100,6 +101,28 @@ async fn main() -> Result<()> {
         match midi_controller.init() {
             Ok(_) => info!("MIDI Controller initialisiert"),
             Err(e) => info!("MIDI konnte nicht initialisiert werden: {}", e),
+        }
+    }
+
+    // mDNS Discovery Service starten
+    let mut discovery_service = match discovery::DiscoveryService::new() {
+        Ok(svc) => {
+            info!("mDNS/DNS-SD Discovery Service gestartet");
+            Some(svc)
+        }
+        Err(e) => {
+            info!("mDNS Discovery nicht verfügbar: {}", e);
+            None
+        }
+    };
+    
+    if let Some(ref mut svc) = discovery_service {
+        if let Err(e) = svc.register_server(
+            "AudioMultiverse",
+            config.api.port,
+            env!("CARGO_PKG_VERSION"),
+        ) {
+            info!("Konnte Server nicht im Netzwerk registrieren: {}", e);
         }
     }
 

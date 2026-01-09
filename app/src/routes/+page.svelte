@@ -6,6 +6,7 @@
 	import MeterBridge from '$lib/components/MeterBridge.svelte';
 	import ScenesView from '$lib/components/ScenesView.svelte';
 	import SettingsView from '$lib/components/SettingsView.svelte';
+	import ServerDiscovery from '$lib/components/ServerDiscovery.svelte';
 	import Fader from '$lib/components/Fader.svelte';
 	import { channels, mixerState, initializeChannels } from '$lib/stores/mixer';
 	import { connectionState, isConnected } from '$lib/stores/connection';
@@ -15,13 +16,41 @@
 	let viewMode: ViewMode = 'mixer';
 	
 	let masterFader = 0.75;
+	let showDiscovery = false;
 
 	onMount(() => {
 		// Demo-Kanäle initialisieren
 		initializeChannels(32, 32);
 		
-		// Verbindung zum Server herstellen
-		connect('ws://localhost:8080/ws');
+		// Verbindung zum Server herstellen (URL aus connectionState/localStorage)
+		connect();
+
+		return () => {
+			disconnect();
+		};
+	});
+	
+	// Zeige Discovery wenn nicht verbunden
+	$: if ($connectionState.status === 'error' || $connectionState.status === 'disconnected') {
+		// Nach 2 Sekunden Discovery anzeigen wenn keine Verbindung
+		setTimeout(() => {
+			if (!$isConnected) {
+				showDiscovery = true;
+			}
+		}, 2000);
+	}
+	
+	function handleServerSelect(e: CustomEvent<{ url: string }>) {
+		showDiscovery = false;
+		connect(e.detail.url);
+	}
+
+	onMount(() => {
+		// Demo-Kanäle initialisieren
+		initializeChannels(32, 32);
+		
+		// Verbindung zum Server herstellen (URL aus connectionState/localStorage)
+		connect();
 
 		return () => {
 			disconnect();
@@ -60,7 +89,11 @@
 
 		<div class="flex items-center gap-4">
 			<!-- Verbindungsstatus -->
-			<div class="flex items-center gap-2">
+			<button 
+				class="flex items-center gap-2 px-3 py-1 rounded hover:bg-gray-700 transition-colors"
+				on:click={() => showDiscovery = true}
+				title="Server-Suche öffnen"
+			>
 				<div class="w-2 h-2 rounded-full" 
 					class:bg-green-500={$isConnected}
 					class:bg-yellow-500={$connectionState.status === 'connecting'}
@@ -69,7 +102,8 @@
 				<span class="text-sm text-gray-400">
 					{$isConnected ? 'Verbunden' : $connectionState.status === 'connecting' ? 'Verbinde...' : 'Getrennt'}
 				</span>
-			</div>
+				<span class="text-gray-500">🔍</span>
+			</button>
 
 			<!-- View-Switcher -->
 			<div class="flex gap-1">
@@ -162,3 +196,11 @@
 		<SettingsView />
 	{/if}
 </div>
+
+<!-- Server Discovery Modal -->
+{#if showDiscovery}
+	<ServerDiscovery 
+		on:select={handleServerSelect}
+		on:close={() => showDiscovery = false}
+	/>
+{/if}

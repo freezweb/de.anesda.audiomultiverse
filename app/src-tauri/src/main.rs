@@ -4,6 +4,7 @@
 )]
 
 mod midi;
+mod discovery;
 
 use std::sync::{Arc, Mutex};
 use tauri::State;
@@ -182,6 +183,18 @@ fn get_server_url(state: State<AppState>) -> Option<String> {
     None
 }
 
+// ============ Discovery Commands ============
+
+/// Nach AudioMultiverse Servern im Netzwerk suchen
+#[tauri::command]
+fn discover_servers() -> Result<Vec<discovery::DiscoveredServer>, String> {
+    let client = discovery::DiscoveryClient::new()
+        .map_err(|e| format!("Discovery Init fehlgeschlagen: {}", e))?;
+    
+    client.discover_servers(3000)
+        .map_err(|e| format!("Discovery Fehler: {}", e))
+}
+
 // ============ Main ============
 
 fn main() {
@@ -210,6 +223,8 @@ fn main() {
             // Server
             set_server_url,
             get_server_url,
+            // Discovery
+            discover_servers,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
