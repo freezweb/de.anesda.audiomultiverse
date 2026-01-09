@@ -176,7 +176,7 @@ pipeline {
                         sh '''
                             # Rust
                             command -v rustc || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-                            source "$HOME/.cargo/env"
+                            . "$HOME/.cargo/env"
                             
                             # System Dependencies für Tauri
                             sudo apt-get update
@@ -194,7 +194,7 @@ pipeline {
                         echo '=== Building Server ==='
                         dir('server') {
                             sh '''
-                                source "$HOME/.cargo/env"
+                                . "$HOME/.cargo/env"
                                 cargo build --release
                             '''
                         }
@@ -203,14 +203,14 @@ pipeline {
                         dir('app') {
                             sh '''
                                 npm install
-                                source "$HOME/.cargo/env"
+                                . "$HOME/.cargo/env"
                                 npx tauri build --bundles deb
                             '''
                         }
                         
                         echo '=== Creating Server .deb Package ==='
                         sh '''
-                            source "$HOME/.cargo/env"
+                            . "$HOME/.cargo/env"
                             cargo install cargo-deb || true
                             
                             cd server
