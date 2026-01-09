@@ -213,10 +213,18 @@ fn run_sap_listener(
                 }
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                // Timeout, continue
+                // Timeout, continue - this is normal
+            }
+            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                // Timeout on Windows, continue - this is normal
             }
             Err(e) => {
-                warn!("SAP receive error: {}", e);
+                // Only log real errors, not timeouts
+                // Error 10060 is WSAETIMEDOUT on Windows - treat as normal
+                let is_timeout = e.raw_os_error() == Some(10060);
+                if !is_timeout {
+                    debug!("SAP receive: {} (this is normal if no AES67 devices on network)", e);
+                }
             }
         }
     }
