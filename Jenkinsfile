@@ -54,23 +54,23 @@ pipeline {
                             @echo off
                             setlocal enabledelayedexpansion
                             
-                            REM Rust und MinGW zum PATH hinzufügen
-                            set PATH=%USERPROFILE%\.cargo\bin;C:\msys64\mingw64\bin;%PATH%
+                            REM Rust und MinGW zum PATH hinzufuegen
+                            set PATH=%USERPROFILE%\\.cargo\\bin;C:\\msys64\\mingw64\\bin;%PATH%
                             
-                            REM Node.js prüfen
+                            REM Node.js pruefen
                             where node >nul 2>&1 || (
                                 echo Node.js nicht gefunden!
                                 exit /b 1
                             )
                             
-                            REM Rust prüfen und ggf. installieren
+                            REM Rust pruefen und ggf. installieren
                             where rustc >nul 2>&1
                             if errorlevel 1 (
                                 echo Rust nicht gefunden - installiere Rust...
                                 curl -sSf -o rustup-init.exe https://win.rustup.rs/x86_64
                                 rustup-init.exe -y --default-toolchain stable-x86_64-pc-windows-gnu
                                 del rustup-init.exe
-                                set PATH=%USERPROFILE%\.cargo\bin;%PATH%
+                                set PATH=%USERPROFILE%\\.cargo\\bin;%PATH%
                             )
                             
                             rustc --version
@@ -85,7 +85,7 @@ pipeline {
                         dir('app') {
                             bat '''
                                 @echo off
-                                set PATH=%USERPROFILE%\.cargo\bin;C:\msys64\mingw64\bin;%PATH%
+                                set PATH=%USERPROFILE%\\.cargo\\bin;C:\\msys64\\mingw64\\bin;%PATH%
                                 call npx tauri build
                             '''
                         }
@@ -123,7 +123,7 @@ pipeline {
                         dir('server') {
                             bat '''
                                 @echo off
-                                set PATH=%USERPROFILE%\.cargo\bin;C:\msys64\mingw64\bin;%PATH%
+                                set PATH=%USERPROFILE%\\.cargo\\bin;C:\\msys64\\mingw64\\bin;%PATH%
                                 cargo build --release
                             '''
                         }
