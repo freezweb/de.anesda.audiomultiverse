@@ -130,7 +130,9 @@ pipeline {
                     
                     post {
                         always {
-                            cleanWs()
+                            catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
+                                cleanWs()
+                            }
                         }
                     }
                 }
@@ -174,7 +176,9 @@ pipeline {
                     
                     post {
                         always {
-                            cleanWs()
+                            catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
+                                cleanWs()
+                            }
                         }
                     }
                 }
@@ -294,7 +298,10 @@ pipeline {
                                 del /q remote\\src-tauri\\gen\\android\\app\\release.keystore 2>nul
                                 del /q remote\\src-tauri\\gen\\android\\keystore.properties 2>nul
                             '''
-                            cleanWs()
+                            // Workspace-Cleanup - Fehler ignorieren (Dateien könnten gesperrt sein)
+                            catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
+                                cleanWs()
+                            }
                         }
                     }
                 }
@@ -404,7 +411,9 @@ pipeline {
                     
                     post {
                         always {
-                            cleanWs()
+                            catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
+                                cleanWs()
+                            }
                         }
                     }
                 }
