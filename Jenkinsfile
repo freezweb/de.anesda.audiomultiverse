@@ -261,7 +261,7 @@ pipeline {
                                     echo keyPassword=%KEY_PASSWORD% >> "src-tauri\\gen\\android\\keystore.properties"
                                     
                                     REM Baue Android APK
-                                    call npx tauri android build --apk
+                                    call npx tauri android build --apk true --ci
                                 '''
                             }
                         }
