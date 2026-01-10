@@ -249,10 +249,20 @@ pipeline {
                             ]) {
                                 bat '''
                                     @echo off
+                                    setlocal enabledelayedexpansion
                                     set "PATH=%USERPROFILE%\\.cargo\\bin;%PATH%"
                                     
                                     REM Kopiere Keystore in Android-Projekt
                                     copy "%KEYSTORE_FILE%" "src-tauri\\gen\\android\\app\\release.keystore"
+                                    
+                                    REM Erstelle keystore.properties ohne trailing spaces
+                                    set "PROPS_FILE=src-tauri\\gen\\android\\keystore.properties"
+                                    (
+                                        echo storeFile=release.keystore
+                                        echo storePassword=!KEYSTORE_PASSWORD!
+                                        echo keyAlias=!KEY_ALIAS!
+                                        echo keyPassword=!KEY_PASSWORD!
+                                    ) > "!PROPS_FILE!"
                                     
                                     REM Baue Android APK
                                     call npx tauri android build --apk true --ci

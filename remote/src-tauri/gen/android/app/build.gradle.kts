@@ -13,6 +13,14 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// Keystore Properties laden (wird vom CI erstellt)
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     compileSdk = 36
     namespace = "de.anesda.audiomultiverse.remote"
@@ -26,14 +34,12 @@ android {
     }
     signingConfigs {
         create("release") {
-            // Der Keystore wird vom CI nach release.keystore kopiert
-            // Passwörter werden über Environment-Variablen bereitgestellt
-            val keystoreFile = file("release.keystore")
-            if (keystoreFile.exists() && System.getenv("KEYSTORE_PASSWORD") != null) {
-                keyAlias = System.getenv("KEY_ALIAS") ?: "release"
-                keyPassword = System.getenv("KEY_PASSWORD")
-                storeFile = keystoreFile
-                storePassword = System.getenv("KEYSTORE_PASSWORD")
+            // Keystore und Passwörter aus keystore.properties (vom CI erstellt)
+            if (keystorePropertiesFile.exists()) {
+                storeFile = file(keystoreProperties.getProperty("storeFile", "release.keystore"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
             }
         }
     }
@@ -51,8 +57,8 @@ android {
         }
         getByName("release") {
             isMinifyEnabled = true
-            val keystoreFile = file("release.keystore")
-            if (keystoreFile.exists() && System.getenv("KEYSTORE_PASSWORD") != null) {
+            // Signing nur aktivieren wenn keystore.properties existiert
+            if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }
             proguardFiles(
