@@ -254,12 +254,6 @@ pipeline {
                                     REM Kopiere Keystore in Android-Projekt
                                     copy "%KEYSTORE_FILE%" "src-tauri\\gen\\android\\app\\release.keystore"
                                     
-                                    REM Erstelle keystore.properties für Gradle
-                                    echo storeFile=release.keystore > "src-tauri\\gen\\android\\keystore.properties"
-                                    echo storePassword=%KEYSTORE_PASSWORD% >> "src-tauri\\gen\\android\\keystore.properties"
-                                    echo keyAlias=%KEY_ALIAS% >> "src-tauri\\gen\\android\\keystore.properties"
-                                    echo keyPassword=%KEY_PASSWORD% >> "src-tauri\\gen\\android\\keystore.properties"
-                                    
                                     REM Baue Android APK
                                     call npx tauri android build --apk true --ci
                                 '''

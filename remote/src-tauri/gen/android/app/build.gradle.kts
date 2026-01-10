@@ -1,5 +1,4 @@
 import java.util.Properties
-import java.io.FileInputStream
 
 plugins {
     id("com.android.application")
@@ -12,13 +11,6 @@ val tauriProperties = Properties().apply {
     if (propFile.exists()) {
         propFile.inputStream().use { load(it) }
     }
-}
-
-// Load keystore properties if available
-val keystorePropertiesFile = rootProject.file("keystore.properties")
-val keystoreProperties = Properties()
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -34,15 +26,13 @@ android {
     }
     signingConfigs {
         create("release") {
-            if (keystorePropertiesFile.exists()) {
-                keyAlias = keystoreProperties["keyAlias"] as String?
-                keyPassword = keystoreProperties["keyPassword"] as String?
-                storeFile = file(keystoreProperties["storeFile"] as String? ?: "release.keystore")
-                storePassword = keystoreProperties["storePassword"] as String?
-            } else if (System.getenv("KEYSTORE_PASSWORD") != null) {
+            // Der Keystore wird vom CI nach release.keystore kopiert
+            // Passwörter werden über Environment-Variablen bereitgestellt
+            val keystoreFile = file("release.keystore")
+            if (keystoreFile.exists() && System.getenv("KEYSTORE_PASSWORD") != null) {
                 keyAlias = System.getenv("KEY_ALIAS") ?: "release"
                 keyPassword = System.getenv("KEY_PASSWORD")
-                storeFile = file(System.getenv("KEYSTORE_FILE") ?: "release.keystore")
+                storeFile = keystoreFile
                 storePassword = System.getenv("KEYSTORE_PASSWORD")
             }
         }
@@ -61,7 +51,8 @@ android {
         }
         getByName("release") {
             isMinifyEnabled = true
-            if (keystorePropertiesFile.exists() || System.getenv("KEYSTORE_PASSWORD") != null) {
+            val keystoreFile = file("release.keystore")
+            if (keystoreFile.exists() && System.getenv("KEYSTORE_PASSWORD") != null) {
                 signingConfig = signingConfigs.getByName("release")
             }
             proguardFiles(
