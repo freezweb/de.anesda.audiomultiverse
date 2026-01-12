@@ -453,10 +453,6 @@ pipeline {
         stage('GitHub Release') {
             agent { label 'windows' }
             
-            when {
-                branch 'main'
-            }
-            
             steps {
                 script {
                     // Alle Artifacts sammeln
