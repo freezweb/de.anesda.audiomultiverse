@@ -468,7 +468,7 @@ pipeline {
                 
                 echo "=== Creating GitHub Release v${APP_VERSION} ==="
                 
-                withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
+                withCredentials([string(credentialsId: 'freezweb', variable: 'GITHUB_TOKEN')]) {
                     bat """
                         @echo off
                         setlocal enabledelayedexpansion
