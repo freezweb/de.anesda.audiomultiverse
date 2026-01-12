@@ -445,6 +445,127 @@ pipeline {
                 archiveArtifacts artifacts: 'release/**/*', fingerprint: true
             }
         }
+        
+        // ============================================================
+        // STAGE 4: GitHub Release erstellen
+        // ============================================================
+        
+        stage('GitHub Release') {
+            agent { label 'windows' }
+            
+            when {
+                branch 'main'
+            }
+            
+            steps {
+                script {
+                    // Alle Artifacts sammeln
+                    try { unstash 'windows-app' } catch (e) { echo "Windows App: ${e}" }
+                    try { unstash 'windows-server' } catch (e) { echo "Windows Server: ${e}" }
+                    try { unstash 'linux-packages' } catch (e) { echo "Linux: ${e}" }
+                    try { unstash 'android-apk' } catch (e) { echo "Android: ${e}" }
+                }
+                
+                echo "=== Creating GitHub Release v${APP_VERSION} ==="
+                
+                withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
+                    bat """
+                        @echo off
+                        setlocal enabledelayedexpansion
+                        
+                        set "VERSION=${APP_VERSION}"
+                        set "REPO=freezweb/de.anesda.audiomultiverse"
+                        set "TAG=v%VERSION%"
+                        
+                        echo Creating GitHub Release %TAG%...
+                        
+                        REM Release-Notizen generieren
+                        echo ## AudioMultiverse v%VERSION% > release_notes.md
+                        echo. >> release_notes.md
+                        echo ### Downloads >> release_notes.md
+                        echo. >> release_notes.md
+                        echo **Windows:** >> release_notes.md
+                        echo - AudioMultiverse_*.msi - Desktop App Installer >> release_notes.md
+                        echo - AudioMultiverse_*-setup.exe - Desktop App NSIS Installer >> release_notes.md
+                        echo - audiomultiverse-server.exe - Server Binary >> release_notes.md
+                        echo. >> release_notes.md
+                        echo **Linux:** >> release_notes.md
+                        echo - audio-multiverse_*.deb - Desktop App >> release_notes.md
+                        echo - audiomultiverse-server_*.deb - Server >> release_notes.md
+                        echo. >> release_notes.md
+                        echo **Android:** >> release_notes.md
+                        echo - app-universal-release.apk - Remote Control App >> release_notes.md
+                        echo. >> release_notes.md
+                        echo --- >> release_notes.md
+                        echo Build: #%BUILD_NUMBER% >> release_notes.md
+                        
+                        REM GitHub Release erstellen via API
+                        curl -s -X POST ^
+                            -H "Authorization: token %GITHUB_TOKEN%" ^
+                            -H "Accept: application/vnd.github.v3+json" ^
+                            "https://api.github.com/repos/%REPO%/releases" ^
+                            -d "{\\"tag_name\\": \\"%TAG%\\", \\"name\\": \\"AudioMultiverse v%VERSION%\\", \\"body\\": \\"Release v%VERSION% - Build #%BUILD_NUMBER%\\", \\"draft\\": false, \\"prerelease\\": false}" ^
+                            > release_response.json
+                        
+                        REM Release ID extrahieren
+                        for /f "tokens=2 delims=:," %%a in ('findstr /c:"\"id\":" release_response.json ^| findstr /n "^" ^| findstr "^1:"') do (
+                            set "RELEASE_ID=%%a"
+                        )
+                        set "RELEASE_ID=!RELEASE_ID: =!"
+                        echo Release ID: !RELEASE_ID!
+                        
+                        if "!RELEASE_ID!"=="" (
+                            echo ERROR: Could not create release
+                            type release_response.json
+                            exit /b 1
+                        )
+                        
+                        REM Artefakte hochladen
+                        echo Uploading artifacts...
+                        
+                        for %%f in (dist\\windows\\app\\*.msi dist\\windows\\app\\*.exe) do (
+                            echo Uploading %%~nxf...
+                            curl -s -X POST ^
+                                -H "Authorization: token %GITHUB_TOKEN%" ^
+                                -H "Content-Type: application/octet-stream" ^
+                                "https://uploads.github.com/repos/%REPO%/releases/!RELEASE_ID!/assets?name=%%~nxf" ^
+                                --data-binary "@%%f"
+                        )
+                        
+                        for %%f in (dist\\windows\\server\\*.exe) do (
+                            echo Uploading %%~nxf...
+                            curl -s -X POST ^
+                                -H "Authorization: token %GITHUB_TOKEN%" ^
+                                -H "Content-Type: application/octet-stream" ^
+                                "https://uploads.github.com/repos/%REPO%/releases/!RELEASE_ID!/assets?name=%%~nxf" ^
+                                --data-binary "@%%f"
+                        )
+                        
+                        for %%f in (dist\\linux\\*.deb) do (
+                            echo Uploading %%~nxf...
+                            curl -s -X POST ^
+                                -H "Authorization: token %GITHUB_TOKEN%" ^
+                                -H "Content-Type: application/octet-stream" ^
+                                "https://uploads.github.com/repos/%REPO%/releases/!RELEASE_ID!/assets?name=%%~nxf" ^
+                                --data-binary "@%%f"
+                        )
+                        
+                        for %%f in (dist\\android\\*.apk) do (
+                            echo Uploading %%~nxf...
+                            curl -s -X POST ^
+                                -H "Authorization: token %GITHUB_TOKEN%" ^
+                                -H "Content-Type: application/vnd.android.package-archive" ^
+                                "https://uploads.github.com/repos/%REPO%/releases/!RELEASE_ID!/assets?name=%%~nxf" ^
+                                --data-binary "@%%f"
+                        )
+                        
+                        echo.
+                        echo GitHub Release v%VERSION% created successfully!
+                        echo https://github.com/%REPO%/releases/tag/%TAG%
+                    """
+                }
+            }
+        }
     }
     
     // ============================================================
