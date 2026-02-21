@@ -2,6 +2,8 @@
 //!
 //! Parametrischer 4-Band EQ mit verschiedenen Filtertypen
 
+#![allow(dead_code)]
+
 use std::f32::consts::PI;
 use serde::{Deserialize, Serialize};
 

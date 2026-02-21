@@ -3,6 +3,9 @@
 //! Echtzeit-Kommunikation mit Clients
 //! Unterstützt Multi-Client-Synchronisation - Änderungen werden an alle verbundenen Clients gebroadcastet
 
+#![allow(dead_code)]
+#![allow(unused_imports)]
+
 use axum::extract::ws::{Message, WebSocket};
 use futures::{StreamExt, SinkExt};
 use std::sync::Arc;
@@ -11,7 +14,7 @@ use tokio::sync::broadcast;
 use tracing::{info, warn, error, debug};
 
 use audiomultiverse_protocol::{
-    ClientMessage, ServerMessage, ClientInfo, ServerInfo, MeterData,
+    ClientMessage, ServerMessage, ServerInfo, MeterData,
     Aes67Status, Aes67StreamInfo,
 };
 use super::routes::AppState;
@@ -242,15 +245,27 @@ async fn handle_client_message(
                 .map(ServerMessage::ChannelUpdated), true) // BROADCAST!
         }
         
-        ClientMessage::SetGain { channel, value: _ } => {
-            // TODO: set_gain implementieren
-            (state.mixer.get_channel(channel)
+        ClientMessage::SetGain { channel, value } => {
+            debug!("Client {} setzt Gain {} auf {:.2} dB", &client_id[..8], channel, value);
+            (state.mixer.set_gain(channel, value)
+                .map(ServerMessage::ChannelUpdated), true) // BROADCAST!
+        }
+        
+        ClientMessage::SetPhase { channel, invert } => {
+            debug!("Client {} setzt Phase {} auf {}", &client_id[..8], channel, invert);
+            (state.mixer.set_phase_invert(channel, invert)
                 .map(ServerMessage::ChannelUpdated), true) // BROADCAST!
         }
         
         ClientMessage::SetChannelName { channel, name } => {
             debug!("Client {} benennt Kanal {} um zu '{}'", &client_id[..8], channel, name);
             (state.mixer.set_channel_name(channel, name)
+                .map(ServerMessage::ChannelUpdated), true) // BROADCAST!
+        }
+        
+        ClientMessage::SetChannelColor { channel, color } => {
+            debug!("Client {} setzt Farbe für Kanal {} auf '{}'", &client_id[..8], channel, color);
+            (state.mixer.set_channel_color(channel, color)
                 .map(ServerMessage::ChannelUpdated), true) // BROADCAST!
         }
         

@@ -41,6 +41,10 @@ pub enum ClientMessage {
     #[serde(rename = "set_gain")]
     SetGain { channel: ChannelId, value: Decibel },
     
+    /// Phase invertieren
+    #[serde(rename = "set_phase")]
+    SetPhase { channel: ChannelId, invert: bool },
+    
     /// Kanalname setzen
     #[serde(rename = "set_channel_name")]
     SetChannelName { channel: ChannelId, name: String },

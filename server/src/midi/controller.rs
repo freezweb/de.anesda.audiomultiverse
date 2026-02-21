@@ -2,12 +2,14 @@
 //! 
 //! Verwaltet MIDI-Geräte und Mappings
 
+#![allow(dead_code)]
+
 use std::sync::Arc;
 use std::collections::HashMap;
 use anyhow::Result;
-use tracing::{info, warn, error};
+use tracing::{info, warn};
 
-use audiomultiverse_protocol::{MidiMapping, MidiTarget, ChannelId};
+use audiomultiverse_protocol::{MidiMapping, MidiTarget};
 use crate::mixer::Mixer;
 
 /// MIDI Controller Manager
@@ -153,7 +155,7 @@ impl MidiController {
     }
 
     /// Note On/Off verarbeiten
-    fn handle_note(&mut self, device: &str, channel: u8, note: u8, on: bool) {
+    fn handle_note(&mut self, _device: &str, _channel: u8, _note: u8, _on: bool) {
         // Notes werden für Toggle-Buttons verwendet
         // TODO: Note-Mappings
     }
@@ -211,7 +213,7 @@ impl MidiController {
     }
 
     /// MIDI Feedback senden (für motorisierte Fader, LEDs)
-    pub fn send_feedback(&self, target: &MidiTarget, value: u8) {
+    pub fn send_feedback(&self, _target: &MidiTarget, _value: u8) {
         // TODO: MIDI Output für Feedback
     }
 

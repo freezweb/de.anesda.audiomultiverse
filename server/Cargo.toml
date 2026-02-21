@@ -6,6 +6,10 @@ description = "AudioMultiverse Server - Audio Engine, AES67/DANTE, MIDI, API"
 authors = []
 license = "MIT"
 
+[features]
+default = []
+dante = []  # Zukünftige DANTE-Unterstützung
+
 [dependencies]
 # Async Runtime
 tokio = { version = "1.35", features = ["full"] }
@@ -60,6 +64,7 @@ statime-linux = "0.4"              # PTP Linux implementation
 
 [dev-dependencies]
 tokio-test = "0.4"
+tempfile = "3.10"
 
 [package.metadata.deb]
 maintainer = "AudioMultiverse Team"

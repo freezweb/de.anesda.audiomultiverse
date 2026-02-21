@@ -5,6 +5,9 @@
 	export let min = 0;
 	export let max = 1.25;
 	
+	// Touch-Optimierung
+	export let touchOptimized = false;
+	
 	const dispatch = createEventDispatcher<{ change: number }>();
 	
 	let trackElement: HTMLDivElement;
@@ -15,6 +18,10 @@
 	
 	// dB-Wert Anzeige
 	$: dbValue = valueToDb(value);
+	
+	// Touch-optimierte Größen
+	$: thumbHeight = touchOptimized ? 'h-12' : 'h-8';
+	$: thumbOffset = touchOptimized ? 24 : 16;
 	
 	function valueToDb(val: number): string {
 		if (val < 0.001) return '-∞';
@@ -30,17 +37,19 @@
 	}
 	
 	function handleStart(e: MouseEvent | TouchEvent) {
+		e.preventDefault();
 		isDragging = true;
 		handleMove(e);
 		
-		window.addEventListener('mousemove', handleMove);
+		window.addEventListener('mousemove', handleMove, { passive: false });
 		window.addEventListener('mouseup', handleEnd);
-		window.addEventListener('touchmove', handleMove);
+		window.addEventListener('touchmove', handleMove, { passive: false });
 		window.addEventListener('touchend', handleEnd);
 	}
 	
 	function handleMove(e: MouseEvent | TouchEvent) {
 		if (!isDragging || !trackElement) return;
+		e.preventDefault();
 		
 		const rect = trackElement.getBoundingClientRect();
 		const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
@@ -63,11 +72,17 @@
 		window.removeEventListener('touchmove', handleMove);
 		window.removeEventListener('touchend', handleEnd);
 	}
+	
+	// Double-tap/click to reset to 0dB
+	function handleDoubleClick() {
+		dispatch('change', 0.75); // 0dB
+	}
 </script>
 
 <div 
 	class="relative w-full h-full select-none touch-none"
 	bind:this={trackElement}
+	on:dblclick={handleDoubleClick}
 >
 	<!-- Fader Track -->
 	<div class="absolute inset-x-0 inset-y-4 bg-gray-800 rounded fader-track">
@@ -83,8 +98,8 @@
 	
 	<!-- Fader Thumb -->
 	<div 
-		class="absolute left-0 right-0 h-8 bg-gradient-to-b from-gray-400 to-gray-600 rounded shadow-lg cursor-grab active:cursor-grabbing border border-gray-500"
-		style="top: calc({position}% - 16px)"
+		class="absolute left-0 right-0 {thumbHeight} bg-gradient-to-b from-gray-400 to-gray-600 rounded shadow-lg cursor-grab active:cursor-grabbing border border-gray-500 touch-manipulation"
+		style="top: calc({position}% - {thumbOffset}px)"
 		on:mousedown={handleStart}
 		on:touchstart={handleStart}
 		role="slider"

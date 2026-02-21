@@ -33,7 +33,7 @@ use crate::network_audio::{SapDiscovery, PtpClock};
 #[tokio::main]
 async fn main() -> Result<()> {
     // Logging initialisieren
-    let subscriber = FmtSubscriber::builder()
+    FmtSubscriber::builder()
         .with_max_level(Level::INFO)
         .with_target(true)
         .with_thread_ids(true)

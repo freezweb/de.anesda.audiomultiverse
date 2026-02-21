@@ -2,6 +2,8 @@
 //! 
 //! REST API Endpoints für Hausautomatisierung und einfache Abfragen
 
+#![allow(dead_code)]
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use axum::{
@@ -18,11 +20,12 @@ use audiomultiverse_protocol::ServerMessage;
 
 use crate::config::ApiConfig;
 use crate::mixer::{Mixer, SceneManager, SceneMetadata, MasterSection, MasterState};
-use crate::network_audio::{NetworkDevice, SapDiscovery, PtpClock};
+use crate::network_audio::{SapDiscovery, PtpClock};
 use crate::audio::AudioCommandSender;
 use audiomultiverse_protocol::{ApiResponse, ChannelState, MixerState, ServerInfo};
 
 use super::websocket::handle_websocket;
+use super::auth::AuthManager;
 
 /// App State für alle Handlers
 #[derive(Clone)]
@@ -42,6 +45,8 @@ pub struct AppState {
     pub broadcast_tx: broadcast::Sender<ServerMessage>,
     /// Anzahl der verbundenen Clients (atomic für thread-safety)
     pub client_count: Arc<AtomicUsize>,
+    /// Auth-Manager für API-Authentifizierung
+    pub auth_manager: Arc<AuthManager>,
 }
 
 /// API Server starten
@@ -57,6 +62,9 @@ pub async fn start_api_server(
     // Broadcast-Channel für Multi-Client-Sync (Kapazität für bis zu 256 gepufferte Nachrichten)
     let (broadcast_tx, _) = broadcast::channel::<ServerMessage>(256);
     
+    // Auth-Manager (enabled basierend auf config)
+    let auth_manager = Arc::new(AuthManager::new(config.auth_enabled.unwrap_or(false)));
+    
     let state = AppState {
         mixer,
         config: config.clone(),
@@ -67,6 +75,7 @@ pub async fn start_api_server(
         audio_cmd,
         broadcast_tx,
         client_count: Arc::new(AtomicUsize::new(0)),
+        auth_manager,
     };
 
     // CORS konfigurieren
@@ -93,6 +102,9 @@ pub async fn start_api_server(
         .route("/api/channels/:id/fader", post(set_fader))
         .route("/api/channels/:id/mute", post(set_mute))
         .route("/api/channels/:id/solo", post(set_solo))
+        .route("/api/channels/:id/gain", post(set_gain))
+        .route("/api/channels/:id/phase", post(set_phase))
+        .route("/api/channels/:id/color", post(set_color))
         
         // Routing
         .route("/api/routing", get(get_routing))
@@ -113,6 +125,21 @@ pub async fn start_api_server(
         .route("/api/master/mono", post(set_master_mono))
         .route("/api/master/talkback", post(set_master_talkback))
         .route("/api/master/oscillator", post(set_master_oscillator))
+        .route("/api/master/limiter", post(set_master_limiter))
+        
+        // Bus-System (Aux/Groups)
+        .route("/api/buses/aux", get(get_aux_buses))
+        .route("/api/buses/aux/:id", get(get_aux_bus))
+        .route("/api/buses/aux/:id", patch(update_aux_bus))
+        .route("/api/buses/groups", get(get_group_buses))
+        .route("/api/buses/groups/:id", get(get_group_bus))
+        .route("/api/buses/groups/:id", patch(update_group_bus))
+        .route("/api/channels/:id/sends", get(get_channel_sends))
+        .route("/api/channels/:id/sends/:aux_id", patch(update_channel_send))
+        
+        // Authentifizierung
+        .route("/api/auth/login", post(login))
+        .route("/api/auth/logout", post(logout))
         
         // AES67 Network Audio
         .route("/api/aes67/status", get(get_aes67_status))
@@ -277,6 +304,57 @@ async fn set_solo(
     Json(req): Json<SoloRequest>,
 ) -> Json<ApiResponse<ChannelState>> {
     match state.mixer.set_solo(id, req.solo) {
+        Some(channel) => Json(ApiResponse::ok(channel)),
+        None => Json(ApiResponse::err(format!("Kanal {} nicht gefunden", id))),
+    }
+}
+
+/// Gain setzen (dB)
+#[derive(serde::Deserialize)]
+pub struct GainRequest {
+    pub gain: f32,
+}
+
+async fn set_gain(
+    State(state): State<AppState>,
+    Path(id): Path<u32>,
+    Json(req): Json<GainRequest>,
+) -> Json<ApiResponse<ChannelState>> {
+    match state.mixer.set_gain(id, req.gain) {
+        Some(channel) => Json(ApiResponse::ok(channel)),
+        None => Json(ApiResponse::err(format!("Kanal {} nicht gefunden", id))),
+    }
+}
+
+/// Phase invertieren
+#[derive(serde::Deserialize)]
+pub struct PhaseRequest {
+    pub invert: bool,
+}
+
+async fn set_phase(
+    State(state): State<AppState>,
+    Path(id): Path<u32>,
+    Json(req): Json<PhaseRequest>,
+) -> Json<ApiResponse<ChannelState>> {
+    match state.mixer.set_phase_invert(id, req.invert) {
+        Some(channel) => Json(ApiResponse::ok(channel)),
+        None => Json(ApiResponse::err(format!("Kanal {} nicht gefunden", id))),
+    }
+}
+
+/// Kanal-Farbe setzen
+#[derive(serde::Deserialize)]
+pub struct ColorRequest {
+    pub color: String,
+}
+
+async fn set_color(
+    State(state): State<AppState>,
+    Path(id): Path<u32>,
+    Json(req): Json<ColorRequest>,
+) -> Json<ApiResponse<ChannelState>> {
+    match state.mixer.set_channel_color(id, req.color) {
         Some(channel) => Json(ApiResponse::ok(channel)),
         None => Json(ApiResponse::err(format!("Kanal {} nicht gefunden", id))),
     }
@@ -498,6 +576,32 @@ async fn set_master_oscillator(
     Json(ApiResponse::ok(new_state))
 }
 
+/// Master-Limiter setzen
+#[derive(serde::Deserialize)]
+pub struct MasterLimiterRequest {
+    pub enabled: Option<bool>,
+    pub threshold: Option<f32>,
+    pub ratio: Option<f32>,
+}
+
+async fn set_master_limiter(
+    State(state): State<AppState>,
+    Json(req): Json<MasterLimiterRequest>,
+) -> Json<ApiResponse<MasterState>> {
+    if let Some(threshold) = req.threshold {
+        state.master.set_limiter_threshold(threshold);
+    }
+    if let Some(ratio) = req.ratio {
+        state.master.set_limiter_ratio(ratio);
+    }
+    let new_state = if let Some(enabled) = req.enabled {
+        state.master.set_limiter_enabled(enabled)
+    } else {
+        state.master.get_state()
+    };
+    Json(ApiResponse::ok(new_state))
+}
+
 // === AES67 Network Audio API ===
 
 /// AES67 Status Response
@@ -649,4 +753,139 @@ async fn refresh_aes67_discovery(
     };
     
     Json(ApiResponse::ok(streams))
+}
+
+// === Bus-System Handlers ===
+
+use crate::mixer::{AuxBusState, GroupBusState, AuxSendState, AuxSendMode};
+
+/// Alle Aux-Busse abrufen
+async fn get_aux_buses(State(state): State<AppState>) -> Json<ApiResponse<Vec<AuxBusState>>> {
+    let buses = state.mixer.get_aux_buses();
+    Json(ApiResponse::ok(buses))
+}
+
+/// Einzelnen Aux-Bus abrufen
+async fn get_aux_bus(
+    State(state): State<AppState>,
+    Path(id): Path<u32>,
+) -> Json<ApiResponse<Option<AuxBusState>>> {
+    let bus = state.mixer.get_aux_bus(id);
+    Json(ApiResponse::ok(bus))
+}
+
+/// Aux-Bus aktualisieren
+#[derive(serde::Deserialize)]
+pub struct AuxBusUpdate {
+    pub name: Option<String>,
+    pub level: Option<f32>,
+    pub mute: Option<bool>,
+    pub pan: Option<f32>,
+    pub stereo_linked: Option<bool>,
+}
+
+async fn update_aux_bus(
+    State(state): State<AppState>,
+    Path(id): Path<u32>,
+    Json(update): Json<AuxBusUpdate>,
+) -> Json<ApiResponse<Option<AuxBusState>>> {
+    let bus = state.mixer.update_aux_bus(id, update.level, update.mute, update.pan, update.name);
+    Json(ApiResponse::ok(bus))
+}
+
+/// Alle Group-Busse abrufen
+async fn get_group_buses(State(state): State<AppState>) -> Json<ApiResponse<Vec<GroupBusState>>> {
+    let buses = state.mixer.get_group_buses();
+    Json(ApiResponse::ok(buses))
+}
+
+/// Einzelnen Group-Bus abrufen
+async fn get_group_bus(
+    State(state): State<AppState>,
+    Path(id): Path<u32>,
+) -> Json<ApiResponse<Option<GroupBusState>>> {
+    let bus = state.mixer.get_group_bus(id);
+    Json(ApiResponse::ok(bus))
+}
+
+/// Group-Bus aktualisieren
+#[derive(serde::Deserialize)]
+pub struct GroupBusUpdate {
+    pub name: Option<String>,
+    pub level: Option<f32>,
+    pub mute: Option<bool>,
+    pub pan: Option<f32>,
+    pub to_master: Option<bool>,
+}
+
+async fn update_group_bus(
+    State(state): State<AppState>,
+    Path(id): Path<u32>,
+    Json(update): Json<GroupBusUpdate>,
+) -> Json<ApiResponse<Option<GroupBusState>>> {
+    let bus = state.mixer.update_group_bus(id, update.level, update.mute, update.pan, update.name, update.to_master);
+    Json(ApiResponse::ok(bus))
+}
+
+/// Aux-Sends für einen Kanal abrufen
+async fn get_channel_sends(
+    State(state): State<AppState>,
+    Path(id): Path<u32>,
+) -> Json<ApiResponse<Vec<AuxSendState>>> {
+    let sends = state.mixer.get_channel_aux_sends(id);
+    Json(ApiResponse::ok(sends))
+}
+
+/// Aux-Send für einen Kanal aktualisieren
+#[derive(serde::Deserialize)]
+pub struct AuxSendUpdate {
+    pub level: Option<f32>,
+    pub enabled: Option<bool>,
+    pub mode: Option<String>, // "pre" oder "post"
+    pub pan: Option<f32>,
+}
+
+async fn update_channel_send(
+    State(state): State<AppState>,
+    Path((channel_id, aux_id)): Path<(u32, u32)>,
+    Json(update): Json<AuxSendUpdate>,
+) -> Json<ApiResponse<Option<AuxSendState>>> {
+    // Mode-String zu Enum konvertieren
+    let mode = update.mode.map(|m| {
+        match m.to_lowercase().as_str() {
+            "pre" | "prefader" => AuxSendMode::PreFader,
+            _ => AuxSendMode::PostFader,
+        }
+    });
+    
+    let send = state.mixer.update_channel_aux_send(channel_id, aux_id, update.level, update.enabled, mode, update.pan);
+    Json(ApiResponse::ok(send))
+}
+
+// === Authentication Handlers ===
+
+use super::auth::{LoginRequest, AuthTokenResponse, extract_token};
+
+/// Login
+async fn login(
+    State(state): State<AppState>,
+    Json(req): Json<LoginRequest>,
+) -> Json<ApiResponse<AuthTokenResponse>> {
+    match state.auth_manager.login(&req.username, &req.password, None) {
+        Ok(token) => Json(ApiResponse::ok(token)),
+        Err(e) => Json(ApiResponse::err(e.to_string())),
+    }
+}
+
+/// Logout
+async fn logout(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> Json<ApiResponse<String>> {
+    if let Some(token) = extract_token(&headers) {
+        state.auth_manager.logout(&token);
+        Json(ApiResponse::ok("Erfolgreich abgemeldet".to_string()))
+    } else {
+        Json(ApiResponse::err("Kein Token gefunden".to_string()))
+    }
 }

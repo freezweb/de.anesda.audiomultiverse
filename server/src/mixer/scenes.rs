@@ -2,6 +2,8 @@
 //!
 //! Speichern und Laden von Mixer-Szenen
 
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::fs;
@@ -211,6 +213,50 @@ pub struct SceneManager {
     
     /// Aktuell aktive Szene
     current_scene: Option<String>,
+    
+    /// Crossfade State (für zeitbasierte Übergänge)
+    crossfade_state: Option<CrossfadeState>,
+}
+
+/// Scene Crossfade State
+#[derive(Debug, Clone)]
+pub struct CrossfadeState {
+    /// Start-Scene (von)
+    pub from_scene: Option<String>,
+    /// Ziel-Scene (nach)
+    pub to_scene: String,
+    /// Fade-Dauer in Sekunden
+    pub duration_secs: f32,
+    /// Verstrichene Zeit
+    pub elapsed_secs: f32,
+    /// Start-Werte (Kanal-ID -> Fader/Pan)
+    pub start_values: HashMap<u32, CrossfadeChannelState>,
+    /// Ziel-Werte
+    pub target_values: HashMap<u32, CrossfadeChannelState>,
+    /// Fade-Kurve
+    pub curve: CrossfadeCurve,
+}
+
+/// Werte die gefadet werden
+#[derive(Debug, Clone, Default)]
+pub struct CrossfadeChannelState {
+    pub fader: f32,
+    pub pan: f32,
+    pub gain: f32,
+}
+
+/// Crossfade-Kurve
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum CrossfadeCurve {
+    /// Lineare Interpolation
+    #[default]
+    Linear,
+    /// Logarithmisch (Audio-natürlich)
+    Logarithmic,
+    /// S-Kurve (Ease In/Out)
+    SCurve,
+    /// Kosinus (sanft)
+    Cosine,
 }
 
 impl SceneManager {
@@ -220,6 +266,7 @@ impl SceneManager {
             storage_path: storage_path.to_string(),
             scenes: HashMap::new(),
             current_scene: None,
+            crossfade_state: None,
         };
         
         // Szenen vom Disk laden
@@ -461,6 +508,140 @@ impl SceneManager {
         info!("📥 Szene importiert: {}", scene.metadata.name);
         
         Ok(scene)
+    }
+    
+    /// Scene Crossfade starten
+    /// 
+    /// Startet einen zeitbasierten Übergang von der aktuellen Szene zur Ziel-Szene
+    pub fn start_crossfade(
+        &mut self,
+        to_scene_id: &str,
+        duration_secs: f32,
+        curve: CrossfadeCurve,
+        current_mixer_state: &MixerState,
+    ) -> anyhow::Result<()> {
+        // Ziel-Szene muss existieren
+        let to_scene = self.scenes.get(to_scene_id)
+            .ok_or_else(|| anyhow::anyhow!("Ziel-Szene nicht gefunden: {}", to_scene_id))?
+            .clone();
+        
+        // Start-Werte aus aktuellem Mixer-State
+        let mut start_values = HashMap::new();
+        for (i, ch) in current_mixer_state.channels.iter().enumerate() {
+            start_values.insert(i as u32, CrossfadeChannelState {
+                fader: ch.fader,
+                pan: ch.pan,
+                gain: ch.gain,
+            });
+        }
+        
+        // Ziel-Werte aus Scene
+        let mut target_values = HashMap::new();
+        for (i, ch) in to_scene.channels.iter().enumerate() {
+            target_values.insert(i as u32, CrossfadeChannelState {
+                fader: ch.base.fader,
+                pan: ch.base.pan,
+                gain: ch.base.gain,
+            });
+        }
+        
+        self.crossfade_state = Some(CrossfadeState {
+            from_scene: self.current_scene.clone(),
+            to_scene: to_scene_id.to_string(),
+            duration_secs: duration_secs.max(0.1), // Min 100ms
+            elapsed_secs: 0.0,
+            start_values,
+            target_values,
+            curve,
+        });
+        
+        info!("🔀 Crossfade gestartet -> {} ({:.1}s)", to_scene.metadata.name, duration_secs);
+        
+        Ok(())
+    }
+    
+    /// Crossfade-Progress aktualisieren (sollte regelmäßig aufgerufen werden)
+    /// 
+    /// Gibt die interpolierten Werte zurück, oder None wenn kein Crossfade aktiv
+    pub fn update_crossfade(&mut self, delta_secs: f32) -> Option<HashMap<u32, CrossfadeChannelState>> {
+        let state = self.crossfade_state.as_mut()?;
+        
+        state.elapsed_secs += delta_secs;
+        
+        // Progress berechnen (0.0 - 1.0)
+        let raw_progress = (state.elapsed_secs / state.duration_secs).clamp(0.0, 1.0);
+        
+        // Kurve anwenden
+        let progress = apply_curve(raw_progress, state.curve);
+        
+        // Interpolierte Werte berechnen
+        let mut result = HashMap::new();
+        
+        for (channel_id, start) in &state.start_values {
+            if let Some(target) = state.target_values.get(channel_id) {
+                result.insert(*channel_id, CrossfadeChannelState {
+                    fader: lerp(start.fader, target.fader, progress),
+                    pan: lerp(start.pan, target.pan, progress),
+                    gain: lerp(start.gain, target.gain, progress),
+                });
+            }
+        }
+        
+        // Crossfade beendet?
+        if raw_progress >= 1.0 {
+            let to_scene = state.to_scene.clone();
+            self.crossfade_state = None;
+            self.current_scene = Some(to_scene.clone());
+            info!("✅ Crossfade abgeschlossen -> {}", to_scene);
+        }
+        
+        Some(result)
+    }
+    
+    /// Crossfade abbrechen
+    pub fn cancel_crossfade(&mut self) {
+        if self.crossfade_state.is_some() {
+            self.crossfade_state = None;
+            info!("❌ Crossfade abgebrochen");
+        }
+    }
+    
+    /// Crossfade aktiv?
+    pub fn is_crossfading(&self) -> bool {
+        self.crossfade_state.is_some()
+    }
+    
+    /// Crossfade Progress (0.0 - 1.0)
+    pub fn crossfade_progress(&self) -> f32 {
+        self.crossfade_state.as_ref()
+            .map(|s| (s.elapsed_secs / s.duration_secs).clamp(0.0, 1.0))
+            .unwrap_or(0.0)
+    }
+}
+
+/// Lineare Interpolation
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
+/// Kurve auf Progress anwenden
+fn apply_curve(t: f32, curve: CrossfadeCurve) -> f32 {
+    match curve {
+        CrossfadeCurve::Linear => t,
+        CrossfadeCurve::Logarithmic => {
+            // Logarithmische Kurve (natürlicher für Audio)
+            if t <= 0.0 { 0.0 }
+            else if t >= 1.0 { 1.0 }
+            else { (t.ln() / 10.0_f32.ln() + 1.0).clamp(0.0, 1.0) * t.sqrt() }
+        }
+        CrossfadeCurve::SCurve => {
+            // Smoothstep S-Kurve
+            t * t * (3.0 - 2.0 * t)
+        }
+        CrossfadeCurve::Cosine => {
+            // Kosinus-Interpolation
+            (1.0 - (t * std::f32::consts::PI).cos()) * 0.5
+        }
     }
 }
 

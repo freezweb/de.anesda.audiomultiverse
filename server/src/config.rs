@@ -2,6 +2,8 @@
 //! 
 //! Lädt Server-Konfiguration aus TOML-Datei
 
+#![allow(dead_code)]
+
 use anyhow::{Result, Context};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -77,6 +79,20 @@ pub struct ApiConfig {
     /// Maximale WebSocket Clients
     #[serde(default = "default_max_clients")]
     pub max_clients: usize,
+    
+    /// Authentifizierung aktivieren
+    #[serde(default)]
+    pub auth_enabled: Option<bool>,
+    
+    /// TLS/HTTPS aktivieren
+    #[serde(default)]
+    pub tls_enabled: Option<bool>,
+    
+    /// TLS Zertifikat-Pfad
+    pub tls_cert: Option<String>,
+    
+    /// TLS Key-Pfad
+    pub tls_key: Option<String>,
 }
 
 /// Netzwerk-Audio Konfiguration (AES67/DANTE)
@@ -125,6 +141,10 @@ impl Default for ServerConfig {
                 port: 8080,
                 cors_enabled: true,
                 max_clients: 10,
+                auth_enabled: Some(false),
+                tls_enabled: Some(false),
+                tls_cert: None,
+                tls_key: None,
             },
             network_audio: NetworkAudioConfig {
                 backend: "aes67".to_string(),

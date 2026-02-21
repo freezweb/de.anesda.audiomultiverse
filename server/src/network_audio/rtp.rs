@@ -8,14 +8,16 @@
 //! - Channels: 1-8 typically
 //! - Packet time: 1ms (48 samples at 48kHz)
 
+#![allow(dead_code)]
+
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use bytes::{BufMut, BytesMut};
 use parking_lot::RwLock;
-use tracing::{info, warn, error, debug, trace};
+use tracing::{info, warn, trace};
 
 // Use PtpClock from parent module (either real or stub depending on platform)
 use super::PtpClock;
@@ -415,7 +417,7 @@ impl RtpReceiver {
 }
 
 /// Decode L24 (24-bit big-endian) audio to f32
-fn decode_l24_to_f32(data: &[u8], channels: u8) -> Vec<f32> {
+fn decode_l24_to_f32(data: &[u8], _channels: u8) -> Vec<f32> {
     let sample_count = data.len() / 3;
     let mut samples = Vec::with_capacity(sample_count);
     

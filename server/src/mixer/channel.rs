@@ -139,6 +139,7 @@ impl Channel {
     }
 
     /// Effektive Gain berechnen (für Audio-Processing)
+    #[allow(dead_code)]
     pub fn effective_gain(&self) -> f32 {
         if self.mute {
             return 0.0;
@@ -167,6 +168,7 @@ impl Channel {
     }
 
     /// Stereo-Gains für Links/Rechts (Pan berücksichtigt)
+    #[allow(dead_code)]
     pub fn stereo_gains(&self) -> (f32, f32) {
         let gain = self.effective_gain();
         

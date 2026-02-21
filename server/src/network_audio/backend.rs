@@ -2,11 +2,12 @@
 //! 
 //! Ermöglicht verschiedene Backends: AES67, DANTE, etc.
 
+#![allow(dead_code)]
+
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 use anyhow::{Result, anyhow};
-use parking_lot::RwLock;
-use tracing::{info, warn, error, debug};
+use tracing::{info, warn, debug};
 
 // Use PtpClock from parent module (either real or stub depending on platform)
 use super::PtpClock;

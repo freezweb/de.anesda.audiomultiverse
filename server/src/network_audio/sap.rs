@@ -6,14 +6,16 @@
 //! SAP Multicast Address: 224.2.127.254:9875
 //! AES67 also uses mDNS for discovery (Ravenna compatible)
 
+#![allow(dead_code)]
+
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use std::collections::HashMap;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use parking_lot::RwLock;
-use tracing::{info, warn, error, debug};
+use tracing::{info, error, debug};
 
 use super::backend::{NetworkDevice, NetworkDeviceType};
 

@@ -11,6 +11,8 @@
 //! Note: Full AES67 support (PTP synchronization) requires Linux.
 //! On Windows, a limited implementation without hardware timestamping is used.
 
+#![allow(dead_code)]
+
 // Common modules (all platforms)
 pub mod rtp;
 pub mod sap;
@@ -24,7 +26,11 @@ pub mod ptp;
 pub use backend::{AudioNetworkBackend, Aes67Backend, Aes67Config, NetworkDevice, NetworkDeviceType};
 #[cfg(target_os = "linux")]
 pub use ptp::{PtpClock, PtpState, PtpStats};
+
+// RTP/SAP Typen für zukünftige Verwendung
+#[allow(unused_imports)]
 pub use rtp::{RtpSender, RtpReceiver, Aes67Format};
+#[allow(unused_imports)]
 pub use sap::{SapDiscovery, Aes67Stream, StreamDirection};
 
 // Stub types for non-Linux platforms
@@ -110,4 +116,5 @@ pub mod ptp_stub {
 }
 
 #[cfg(not(target_os = "linux"))]
+#[allow(unused_imports)]
 pub use ptp_stub::{PtpClock, PtpState, PtpStats};

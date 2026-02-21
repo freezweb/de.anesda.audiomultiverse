@@ -5,5 +5,7 @@
 
 mod routes;
 mod websocket;
+pub mod auth;
 
 pub use routes::start_api_server;
+pub use auth::{AuthManager, AuthError, UserRole, AuthToken, User, LoginRequest, AuthTokenResponse};

@@ -6,12 +6,23 @@ mod channel;
 mod routing;
 pub mod scenes;
 pub mod master;
+pub mod bus;
+
+#[cfg(test)]
+mod bus_tests;
+#[cfg(test)]
+mod scenes_tests;
 
 pub use channel::Channel;
 pub use audiomultiverse_protocol::ChannelState;
 pub use routing::RoutingMatrix;
-pub use scenes::{Scene, SceneManager, SceneMetadata, RecallFilter};
+pub use scenes::{Scene, SceneManager, SceneMetadata, CrossfadeCurve, CrossfadeState};
+
+// RecallFilter für zukünftige Verwendung
+#[allow(unused_imports)]
+pub use scenes::RecallFilter;
 pub use master::{MasterSection, MasterState};
+pub use bus::{BusManager, AuxBus, AuxBusState, AuxSend, AuxSendState, AuxSendMode, GroupBus, GroupBusState};
 
 use std::sync::RwLock;
 use audiomultiverse_protocol::{ChannelId, MixerState};
@@ -32,6 +43,9 @@ pub struct Mixer {
     
     /// Solo-Modus aktiv (welche Kanäle)
     solo_active: RwLock<Vec<ChannelId>>,
+    
+    /// Bus-Manager (Aux/Groups)
+    bus_manager: RwLock<BusManager>,
 }
 
 impl Mixer {
@@ -42,6 +56,9 @@ impl Mixer {
             .collect();
 
         let routing = RoutingMatrix::new(input_count, output_count);
+        
+        // 8 Aux Busse, 4 Groups
+        let bus_manager = BusManager::new(8, 4);
 
         Self {
             input_count,
@@ -49,6 +66,7 @@ impl Mixer {
             channels: RwLock::new(channels),
             routing: RwLock::new(routing),
             solo_active: RwLock::new(vec![]),
+            bus_manager: RwLock::new(bus_manager),
         }
     }
 
@@ -119,6 +137,39 @@ impl Mixer {
         }
     }
 
+    /// Gain/Trim setzen (-20dB bis +20dB)
+    pub fn set_gain(&self, id: ChannelId, gain: f32) -> Option<ChannelState> {
+        let mut channels = self.channels.write().unwrap();
+        if let Some(channel) = channels.get_mut(id as usize) {
+            channel.set_gain(gain);
+            Some(channel.state())
+        } else {
+            None
+        }
+    }
+
+    /// Phase Invert setzen
+    pub fn set_phase_invert(&self, id: ChannelId, invert: bool) -> Option<ChannelState> {
+        let mut channels = self.channels.write().unwrap();
+        if let Some(channel) = channels.get_mut(id as usize) {
+            channel.set_phase_invert(invert);
+            Some(channel.state())
+        } else {
+            None
+        }
+    }
+
+    /// Kanalfarbe setzen
+    pub fn set_channel_color(&self, id: ChannelId, color: String) -> Option<ChannelState> {
+        let mut channels = self.channels.write().unwrap();
+        if let Some(channel) = channels.get_mut(id as usize) {
+            channel.set_color(color);
+            Some(channel.state())
+        } else {
+            None
+        }
+    }
+
     /// Kanalname setzen
     pub fn set_channel_name(&self, id: ChannelId, name: String) -> Option<ChannelState> {
         let mut channels = self.channels.write().unwrap();
@@ -164,6 +215,106 @@ impl Mixer {
         if let Some(channel) = channels.get_mut(id as usize) {
             channel.update_meter(peak);
         }
+    }
+    
+    // === Bus-System Methoden ===
+    
+    /// Alle Aux-Busse abrufen
+    pub fn get_aux_buses(&self) -> Vec<AuxBusState> {
+        let bus_manager = self.bus_manager.read().unwrap();
+        bus_manager.aux_buses.iter().map(|b| b.state()).collect()
+    }
+    
+    /// Einzelnen Aux-Bus abrufen
+    pub fn get_aux_bus(&self, id: u32) -> Option<AuxBusState> {
+        let bus_manager = self.bus_manager.read().unwrap();
+        bus_manager.aux_buses.get(id as usize).map(|b| b.state())
+    }
+    
+    /// Aux-Bus aktualisieren
+    pub fn update_aux_bus(&self, id: u32, level: Option<f32>, mute: Option<bool>, pan: Option<f32>, name: Option<String>) -> Option<AuxBusState> {
+        let mut bus_manager = self.bus_manager.write().unwrap();
+        if let Some(bus) = bus_manager.aux_buses.get_mut(id as usize) {
+            if let Some(l) = level { bus.set_level(l); }
+            if let Some(m) = mute { bus.set_mute(m); }
+            if let Some(p) = pan { bus.set_pan(p); }
+            if let Some(n) = name { bus.name = n; }
+            Some(bus.state())
+        } else {
+            None
+        }
+    }
+    
+    /// Alle Group-Busse abrufen
+    pub fn get_group_buses(&self) -> Vec<GroupBusState> {
+        let bus_manager = self.bus_manager.read().unwrap();
+        bus_manager.group_buses.iter().map(|b| b.state()).collect()
+    }
+    
+    /// Einzelnen Group-Bus abrufen
+    pub fn get_group_bus(&self, id: u32) -> Option<GroupBusState> {
+        let bus_manager = self.bus_manager.read().unwrap();
+        bus_manager.group_buses.get(id as usize).map(|b| b.state())
+    }
+    
+    /// Group-Bus aktualisieren
+    pub fn update_group_bus(&self, id: u32, level: Option<f32>, mute: Option<bool>, pan: Option<f32>, name: Option<String>, to_master: Option<bool>) -> Option<GroupBusState> {
+        let mut bus_manager = self.bus_manager.write().unwrap();
+        if let Some(bus) = bus_manager.group_buses.get_mut(id as usize) {
+            if let Some(l) = level { bus.set_level(l); }
+            if let Some(m) = mute { bus.set_mute(m); }
+            if let Some(p) = pan { bus.set_pan(p); }
+            if let Some(n) = name { bus.name = n; }
+            if let Some(tm) = to_master { bus.set_to_master(tm); }
+            Some(bus.state())
+        } else {
+            None
+        }
+    }
+    
+    /// Aux-Send für einen Kanal abrufen
+    pub fn get_channel_aux_sends(&self, channel_id: u32) -> Vec<AuxSendState> {
+        let bus_manager = self.bus_manager.read().unwrap();
+        bus_manager.get_channel_aux_sends(channel_id)
+            .into_iter()
+            .map(|s| s.state())
+            .collect()
+    }
+    
+    /// Aux-Send aktualisieren
+    pub fn update_channel_aux_send(&self, channel_id: u32, aux_id: u32, level: Option<f32>, enabled: Option<bool>, mode: Option<AuxSendMode>, pan: Option<f32>) -> Option<AuxSendState> {
+        let mut bus_manager = self.bus_manager.write().unwrap();
+        
+        // Send abrufen oder erstellen
+        let sends = bus_manager.channel_aux_sends.entry(channel_id).or_insert_with(Vec::new);
+        
+        // Finde oder erstelle den Send
+        let send = if let Some(s) = sends.iter_mut().find(|s| s.aux_bus_id() == aux_id) {
+            s
+        } else {
+            let new_send = AuxSend::new(aux_id as u8);
+            sends.push(new_send);
+            sends.last_mut().unwrap()
+        };
+        
+        if let Some(l) = level { send.set_level(l); }
+        if let Some(e) = enabled { send.set_enabled(e); }
+        if let Some(m) = mode { send.set_mode(m); }
+        if let Some(p) = pan { send.set_pan(p); }
+        
+        Some(send.state())
+    }
+    
+    /// Kanal einer Group zuweisen
+    pub fn assign_channel_to_group(&self, channel_id: u32, group_id: u32) {
+        let mut bus_manager = self.bus_manager.write().unwrap();
+        bus_manager.assign_channel_to_group(channel_id, group_id);
+    }
+    
+    /// Kanal von Group entfernen
+    pub fn remove_channel_from_group(&self, channel_id: u32, group_id: u32) {
+        let mut bus_manager = self.bus_manager.write().unwrap();
+        bus_manager.remove_channel_from_group(channel_id, group_id);
     }
 }
 

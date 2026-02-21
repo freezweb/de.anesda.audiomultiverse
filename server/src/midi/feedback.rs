@@ -2,12 +2,12 @@
 //!
 //! Sendet MIDI-Daten zurück an Controller (motorisierte Fader, LEDs, etc.)
 
+#![allow(dead_code)]
+
 use std::sync::{Arc, Mutex, RwLock};
 use std::collections::HashMap;
-use std::thread;
-use std::time::Duration;
 use anyhow::Result;
-use tracing::{info, warn, error, debug};
+use tracing::{info, error, debug};
 use midir::{MidiOutput, MidiOutputConnection, MidiOutputPort};
 
 use audiomultiverse_protocol::{MidiTarget, ChannelId};
@@ -249,11 +249,11 @@ impl MidiFeedback {
         
         // 14-bit Auflösung (0-16383)
         let pitch_value = ((value.clamp(0.0, 1.0) * 16383.0) as u16).min(16383);
-        let lsb = (pitch_value & 0x7F) as u8;
-        let msb = ((pitch_value >> 7) & 0x7F) as u8;
+        let _lsb = (pitch_value & 0x7F) as u8;
+        let _msb = ((pitch_value >> 7) & 0x7F) as u8;
         
         // Pitch Bend: 0xE0 + channel
-        if let Some((device, _, _)) = self.mappings.get(&MidiTarget::Fader { channel }) {
+        if let Some((_device, _, _)) = self.mappings.get(&MidiTarget::Fader { channel }) {
             // Manuell Pitch Bend senden
             // TODO: Spezielle Methode für Pitch Bend
         }
@@ -351,10 +351,10 @@ impl MidiFeedback {
         // MCU Meter: Channel Pressure mit Kanal in High Nibble, Level in Low Nibble
         // Level: 0-12 (0=aus, 1-12=Segmente, +0x10 für Clip)
         let segments = (level.clamp(0.0, 1.0) * 12.0) as u8;
-        let meter_value = ((channel as u8 % 8) << 4) | segments;
+        let _meter_value = ((channel as u8 % 8) << 4) | segments;
         
         // Channel Pressure (0xD0)
-        if let Ok(output) = self.output.lock() {
+        if let Ok(_output) = self.output.lock() {
             // Manuell senden, da kein CC
             // TODO: Raw MIDI Methode
         }

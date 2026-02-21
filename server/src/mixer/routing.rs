@@ -2,6 +2,8 @@
 //! 
 //! NxM Matrix für vollflexibles Audio-Routing
 
+#![allow(dead_code)]
+
 /// Routing-Matrix für Input->Output Zuordnung
 pub struct RoutingMatrix {
     /// Anzahl Eingänge

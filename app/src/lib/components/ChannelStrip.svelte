@@ -12,17 +12,29 @@
 		solo: boolean;
 		pan: number;
 		color?: string;
+		phaseInvert?: boolean;
+		gain?: number;
 	};
+	
+	// Touch-Optimierung: Größere Touch-Targets
+	export let touchOptimized = false;
 	
 	const dispatch = createEventDispatcher<{
 		faderChange: number;
 		muteToggle: void;
 		soloToggle: void;
 		panChange: number;
+		phaseToggle: void;
+		gainChange: number;
 	}>();
 	
 	// Meter-Daten für diesen Kanal
 	$: meter = $meterData.get(channel.id);
+	
+	// Touch-optimierte Button-Größe
+	$: buttonClass = touchOptimized 
+		? 'flex-1 py-3 text-sm font-bold rounded touch-manipulation'
+		: 'flex-1 py-1 text-xs font-bold rounded';
 
 	function onFaderChange(e: CustomEvent<number>) {
 		dispatch('faderChange', e.detail);
@@ -34,6 +46,10 @@
 
 	function onSoloToggle() {
 		dispatch('soloToggle');
+	}
+	
+	function onPhaseToggle() {
+		dispatch('phaseToggle');
 	}
 	
 	function onPanChange(e: Event) {
@@ -84,18 +100,29 @@
 	<!-- Mute & Solo Buttons -->
 	<div class="flex gap-1">
 		<button 
-			class="flex-1 py-1 text-xs font-bold rounded {channel.mute ? 'bg-red-600' : 'bg-gray-600 hover:bg-gray-500'}"
+			class="{buttonClass} {channel.mute ? 'bg-red-600' : 'bg-gray-600 hover:bg-gray-500'}"
 			on:click={onMuteToggle}
+			title="Mute"
 		>
 			M
 		</button>
 		<button 
-			class="flex-1 py-1 text-xs font-bold rounded {channel.solo ? 'bg-yellow-500 text-black' : 'bg-gray-600 hover:bg-gray-500'}"
+			class="{buttonClass} {channel.solo ? 'bg-yellow-500 text-black' : 'bg-gray-600 hover:bg-gray-500'}"
 			on:click={onSoloToggle}
+			title="Solo"
 		>
 			S
 		</button>
 	</div>
+	
+	<!-- Phase Invert Button -->
+	<button 
+		class="{buttonClass} w-full {channel.phaseInvert ? 'bg-blue-600' : 'bg-gray-600 hover:bg-gray-500'}"
+		on:click={onPhaseToggle}
+		title="Phasen-Invertierung"
+	>
+		Ø
+	</button>
 
 	<!-- Kanal-Nummer -->
 	<div class="text-center text-xs text-gray-500">

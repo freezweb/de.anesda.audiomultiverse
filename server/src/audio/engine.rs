@@ -2,12 +2,14 @@
 //! 
 //! Hauptmodul für Audio-Verarbeitung mit cpal und AES67 Integration
 
+#![allow(dead_code)]
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::{Result, anyhow};
-use tracing::{info, warn, error};
+use tracing::{info, error};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Device, Host, Stream, StreamConfig, SampleFormat};
+use cpal::{Host, Stream, StreamConfig};
 use tokio::sync::mpsc;
 
 use crate::mixer::{Mixer, MasterSection};
@@ -337,7 +339,7 @@ impl AudioEngine {
         let mixer = self.mixer.clone();
         let master = self.master.clone();
         let sample_rate = self.sample_rate as f32;
-        let running = self.running.clone();
+        let _running = self.running.clone();
         
         // Input Stream
         let input_stream = input_device.build_input_stream(
@@ -533,19 +535,46 @@ fn process_channels(output: &mut [f32], mixer: &Mixer, channels: usize) {
             if idx < output.len() {
                 let state = &channel_states[ch];
                 
+                // Gain/Trim anwenden
+                let trim_linear = db_to_gain(state.gain);
+                output[idx] *= trim_linear;
+                
+                // Phase Invert
+                if state.phase_invert {
+                    output[idx] = -output[idx];
+                }
+                
                 // Fader und Mute anwenden
-                let gain = if state.mute {
+                let fader_gain = if state.mute {
                     0.0
                 } else {
                     fader_to_gain(state.fader)
                 };
                 
-                output[idx] *= gain;
+                output[idx] *= fader_gain;
+                
+                // Pan Law (Constant Power) - nur bei Stereo
+                if channels >= 2 && ch < channels {
+                    let is_left = ch % 2 == 0;
+                    let pan = state.pan; // -1.0 = Links, 0.0 = Mitte, 1.0 = Rechts
+                    let pan_rad = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
+                    let pan_gain = if is_left { pan_rad.cos() } else { pan_rad.sin() };
+                    output[idx] *= pan_gain;
+                }
                 
                 // Meter aktualisieren (Peak)
                 mixer.update_meter(ch as u32, output[idx].abs());
             }
         }
+    }
+}
+
+/// dB zu linearem Gain konvertieren
+fn db_to_gain(db: f32) -> f32 {
+    if db <= -96.0 {
+        0.0
+    } else {
+        10.0_f32.powf(db / 20.0)
     }
 }
 

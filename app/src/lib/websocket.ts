@@ -201,7 +201,28 @@ function handleMessage(message: { type: string; payload?: any }): void {
             break;
             
         case 'meters':
-            meterData.set(message.payload);
+            // Meter-Daten vom Server: { peaks: number[], timestamp: number }
+            const metersPayload = message.payload;
+            if (metersPayload && metersPayload.peaks) {
+                meterData.set({
+                    inputs: metersPayload.peaks,
+                    outputs: [],
+                    master: metersPayload.peaks.slice(-2) || []
+                });
+                
+                // Auch Channel-Meter-Werte im mixerState aktualisieren
+                mixerState.update(state => {
+                    if (!state) return state;
+                    const peaks = metersPayload.peaks;
+                    return {
+                        ...state,
+                        channels: state.channels.map((ch, i) => ({
+                            ...ch,
+                            meter: peaks[i] ?? 0
+                        }))
+                    };
+                });
+            }
             break;
             
         case 'error':

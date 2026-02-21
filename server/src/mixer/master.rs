@@ -2,6 +2,8 @@
 //!
 //! Stereo Master Bus mit Limiter, DIM, Mono-Check
 
+#![allow(dead_code)]
+
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use serde::{Deserialize, Serialize};
 use tracing::info;
