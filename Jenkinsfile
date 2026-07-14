@@ -185,16 +185,18 @@ pipeline {
                 
                 // --------------------------------------------------------
                 // Android Remote App (APK)
-                // Läuft auf Windows mit Android SDK
+                // Läuft auf dem gemeinsamen Linux-Android-Pool
                 // --------------------------------------------------------
                 
                 stage('Android Remote') {
-                    agent { label 'windows' }
+                    agent { label 'android' }
                     
                     environment {
-                        ANDROID_HOME = 'C:\\Program Files (x86)\\Android\\android-sdk'
-                        JAVA_HOME = 'C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.16.8-hotspot'
-                        PATH = "${env.ANDROID_HOME}\\platform-tools;${env.ANDROID_HOME}\\build-tools\\35.0.0;${env.JAVA_HOME}\\bin;${env.PATH}"
+                        ANDROID_HOME = '/opt/android-sdk'
+                        ANDROID_SDK_ROOT = '/opt/android-sdk'
+                        ANDROID_NDK_HOME = '/opt/android-sdk/ndk/28.2.13676358'
+                        JAVA_HOME = '/usr/lib/jvm/java-17-openjdk-amd64'
+                        PATH = "/opt/flutter/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/build-tools/35.0.0:/usr/lib/jvm/java-17-openjdk-amd64/bin:${env.PATH}"
                         VERSION_CODE = "${env.BUILD_NUMBER}"
                     }
                     
@@ -202,33 +204,23 @@ pipeline {
                         unstash 'source'
                         
                         echo "=== Setting Version to ${APP_VERSION} ==="
-                        bat """
-                            @echo off
-                            powershell -Command "(Get-Content remote\\src-tauri\\tauri.conf.json) -replace '\"version\": \"[0-9]+\\.[0-9]+\\.[0-9]+\"', '\"version\": \"%APP_VERSION%\"' | Set-Content remote\\src-tauri\\tauri.conf.json"
-                            powershell -Command "(Get-Content remote\\src-tauri\\Cargo.toml) -replace 'version = \"[0-9]+\\.[0-9]+\\.[0-9]+\"', 'version = \"%APP_VERSION%\"' | Set-Content remote\\src-tauri\\Cargo.toml"
-                        """
+                        sh '''
+                            set -eu
+                            sed -Ei 's/"version": "[0-9]+\\.[0-9]+\\.[0-9]+"/"version": "'"$APP_VERSION"'"/' remote/src-tauri/tauri.conf.json
+                            sed -Ei '0,/version = "[0-9]+\\.[0-9]+\\.[0-9]+"/s//version = "'"$APP_VERSION"'"/' remote/src-tauri/Cargo.toml
+                        '''
                         
-                        echo '=== Accepting Android SDK Licenses ==='
-                        bat '''
-                            @echo off
-                            setlocal enabledelayedexpansion
-                            
-                            REM Erstelle licenses Ordner falls nicht vorhanden
-                            if not exist "%ANDROID_HOME%\\licenses" mkdir "%ANDROID_HOME%\\licenses"
-                            
-                            REM Akzeptiere Lizenzen
-                            if exist "%ANDROID_HOME%\\cmdline-tools\\latest\\bin\\sdkmanager.bat" (
-                                (echo y & echo y & echo y & echo y & echo y & echo y) | "%ANDROID_HOME%\\cmdline-tools\\latest\\bin\\sdkmanager.bat" --licenses
-                            ) else (
-                                echo 24333f8a63b6825ea9c5514f83c2829b004d1fee > "%ANDROID_HOME%\\licenses\\android-sdk-license"
-                                echo 8933bad161af4178b1185d1a37fbf41ea5269c55 > "%ANDROID_HOME%\\licenses\\android-ndk-license"
-                            )
+                        echo '=== Android SDK prüfen ==='
+                        sh '''
+                            set -eu
+                            test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+                            test -d "$ANDROID_NDK_HOME"
+                            java -version
                         '''
                         
                         echo '=== Installing Rust Android Targets ==='
-                        bat '''
-                            @echo off
-                            set "PATH=%USERPROFILE%\\.cargo\\bin;%PATH%"
+                        sh '''
+                            set -eu
                             rustup target add aarch64-linux-android
                             rustup target add armv7-linux-androideabi
                             rustup target add x86_64-linux-android
@@ -237,10 +229,7 @@ pipeline {
                         
                         echo '=== Installing Remote Dependencies ==='
                         dir('remote') {
-                            bat '''
-                                @echo off
-                                call npm install
-                            '''
+                            sh 'npm install'
                         }
                         
                         echo '=== Building Android APK ==='
@@ -251,39 +240,26 @@ pipeline {
                                 string(credentialsId: 'key-alias', variable: 'KEY_ALIAS'),
                                 string(credentialsId: 'key-password', variable: 'KEY_PASSWORD')
                             ]) {
-                                bat '''
-                                    @echo off
-                                    setlocal enabledelayedexpansion
-                                    set "PATH=%USERPROFILE%\\.cargo\\bin;%PATH%"
-                                    
-                                    REM Kopiere Keystore in Android-Projekt
-                                    copy "%KEYSTORE_FILE%" "src-tauri\\gen\\android\\app\\release.keystore"
-                                    
-                                    REM Erstelle keystore.properties ohne trailing spaces
-                                    set "PROPS_FILE=src-tauri\\gen\\android\\keystore.properties"
-                                    (
-                                        echo storeFile=release.keystore
-                                        echo storePassword=!KEYSTORE_PASSWORD!
-                                        echo keyAlias=!KEY_ALIAS!
-                                        echo keyPassword=!KEY_PASSWORD!
-                                    ) > "!PROPS_FILE!"
-                                    
-                                    REM Baue Android APK
-                                    call npx tauri android build --apk true --ci
+                                sh '''
+                                    set -eu
+                                    install -m 600 "$KEYSTORE_FILE" src-tauri/gen/android/app/release.keystore
+                                    printf '%s\n' \
+                                        'storeFile=release.keystore' \
+                                        "storePassword=$KEYSTORE_PASSWORD" \
+                                        "keyAlias=$KEY_ALIAS" \
+                                        "keyPassword=$KEY_PASSWORD" \
+                                        > src-tauri/gen/android/keystore.properties
+                                    npx tauri android build --apk true --ci
                                 '''
                             }
                         }
                         
                         echo '=== Collecting Android Artifacts ==='
-                        bat '''
-                            @echo off
-                            mkdir dist\\android 2>nul
-                            
-                            REM Suche nach APKs in verschiedenen möglichen Pfaden
-                            for /r remote\\src-tauri\\gen\\android %%f in (*.apk) do (
-                                echo Gefunden: %%f
-                                copy "%%f" dist\\android\\
-                            )
+                        sh '''
+                            set -eu
+                            mkdir -p dist/android
+                            find remote/src-tauri/gen/android -type f -name '*.apk' -print -exec cp {} dist/android/ \\;
+                            test -n "$(find dist/android -maxdepth 1 -type f -name '*.apk' -print -quit)"
                         '''
                         
                         archiveArtifacts artifacts: 'dist/android/*.apk', fingerprint: true
@@ -293,11 +269,7 @@ pipeline {
                     post {
                         always {
                             // Keystore-Dateien entfernen
-                            bat '''
-                                @echo off
-                                del /q remote\\src-tauri\\gen\\android\\app\\release.keystore 2>nul
-                                del /q remote\\src-tauri\\gen\\android\\keystore.properties 2>nul
-                            '''
+                            sh 'rm -f remote/src-tauri/gen/android/app/release.keystore remote/src-tauri/gen/android/keystore.properties'
                             // Workspace-Cleanup - Fehler ignorieren (Dateien könnten gesperrt sein)
                             catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
                                 cleanWs()
