@@ -249,7 +249,7 @@ pipeline {
                                         "keyAlias=$KEY_ALIAS" \
                                         "keyPassword=$KEY_PASSWORD" \
                                         > src-tauri/gen/android/keystore.properties
-                                    npx tauri android build --apk --ci
+                                        npx tauri android build --target aarch64 --apk --ci
                                 '''
                             }
                         }
