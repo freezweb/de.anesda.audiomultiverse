@@ -26,7 +26,7 @@ cpal = "0.15"
 
 # AES67/Network Audio (core - all platforms)
 socket2 = "0.5"                    # Low-level socket control for multicast
-bytes = "1.5"                      # Buffer handling for RTP
+bytes = "1.11"                      # Buffer handling for RTP
 byteorder = "1.5"                  # Network byte order for RTP packets
 rand = "0.8"                       # RTP SSRC generation
 parking_lot = "0.12"               # Fast mutexes for audio thread
